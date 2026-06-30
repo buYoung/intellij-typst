@@ -1,6 +1,6 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
-    <id>com.github.buyoung.intellijtypst</id>
+    <id>com.livteam.typninja</id>
     <name>intellij-typst</name>
     <vendor>buyoung</vendor>
     <description><![CDATA[
@@ -13,7 +13,7 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.buyoung.intellijtypst.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.github.buyoung.intellijtypst.startup.MyProjectActivity" />
+        <toolWindow factoryClass="com.livteam.typninja.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <postStartupActivity implementation="com.livteam.typninja.startup.MyProjectActivity" />
     </extensions>
 </idea-plugin>

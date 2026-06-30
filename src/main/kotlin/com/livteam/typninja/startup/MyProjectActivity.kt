@@ -1,4 +1,4 @@
-package com.github.buyoung.intellijtypst.startup
+package com.livteam.typninja.startup
 
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project

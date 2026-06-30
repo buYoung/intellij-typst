@@ -1,9 +1,9 @@
-package com.github.buyoung.intellijtypst.services
+package com.livteam.typninja.services
 
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.github.buyoung.intellijtypst.MyBundle
+import com.livteam.typninja.MyBundle
 
 @Service(Service.Level.PROJECT)
 class MyProjectService(project: Project) {

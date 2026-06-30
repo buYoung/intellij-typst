@@ -1,4 +1,4 @@
-package com.github.buyoung.intellijtypst
+package com.livteam.typninja
 
 import com.intellij.DynamicBundle
 import org.jetbrains.annotations.NonNls

@@ -1,4 +1,4 @@
-package com.github.buyoung.intellijtypst.toolWindow
+package com.livteam.typninja.toolWindow
 
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -8,8 +8,8 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBLabel
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
-import com.github.buyoung.intellijtypst.MyBundle
-import com.github.buyoung.intellijtypst.services.MyProjectService
+import com.livteam.typninja.MyBundle
+import com.livteam.typninja.services.MyProjectService
 import javax.swing.JButton
 
 
