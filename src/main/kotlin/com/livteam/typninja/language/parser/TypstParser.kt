@@ -3,6 +3,7 @@ package com.livteam.typninja.language.parser
 import com.intellij.lang.ASTNode
 import com.intellij.lang.PsiBuilder
 import com.intellij.lang.PsiParser
+import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
@@ -120,7 +121,7 @@ class TypstParser : PsiParser {
             T.UNDERSCORE -> parseToggle(builder, E.EMPH, T.UNDERSCORE, nested, depth)
             else ->
                 if (isProse(t)) parseProseRun(builder)
-                else consumeErrorToken(builder, "Unexpected token")
+                else consumeUnexpectedInMarkup(builder)
         }
     }
 
@@ -191,7 +192,7 @@ class TypstParser : PsiParser {
             if (t == T.SEMICOLON) { builder.advanceLexer(); continue }
             if (isCloser(t)) { consumeErrorToken(builder, "Unmatched closing delimiter"); continue }
             val before = builder.rawTokenIndex()
-            if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Unexpected token")
+            if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Expected an expression")
             if (builder.tokenType == T.SEMICOLON) builder.advanceLexer()
             if (builder.rawTokenIndex() == before) consumeErrorToken(builder, "Unexpected token")
         }
@@ -282,10 +283,10 @@ class TypstParser : PsiParser {
             T.RAW_TEXT -> wrapSingle(builder, E.RAW)
             T.IDENTIFIER ->
                 if (builder.lookAhead(1) == T.ARROW) parseIdentClosure(builder, depth)
-                else builder.advanceLexer() // plain identifier leaf
+                else wrapSingle(builder, E.REFERENCE_EXPR) // code-context identifier usage (carries a PsiReference)
             else ->
                 if (isLiteral(t)) builder.advanceLexer() // number / bool / none / auto / underscore
-                else consumeErrorToken(builder, "Unexpected token")
+                else consumeErrorToken(builder, "Expected an expression")
         }
     }
 
@@ -302,6 +303,10 @@ class TypstParser : PsiParser {
                 builder.advanceLexer() // name
                 if (builder.tokenType == T.LPAREN) parseParams(builder, depth) // let f(x) = ...
             }
+            // `#let = 1` — an assignment operator with no binding name in front is unambiguously wrong
+            // and never a mid-typing state (the name is always typed before `=`), so flag it. Any other
+            // token (EOF / newline / `;` while the name is still being typed) stays silent: recovery.
+            else -> if (isAssignOp(builder.tokenType)) markError(builder, "Expected a binding name")
         }
         if (builder.tokenType == T.EQ) {
             builder.advanceLexer() // =
@@ -493,7 +498,7 @@ class TypstParser : PsiParser {
             t == T.DOT_DOT -> { parseSpread(builder, depth); false }
             t == T.IDENTIFIER && builder.lookAhead(1) == T.COLON -> { parseNamedOrKeyed(builder, E.NAMED, depth); true }
             t == T.STRING && builder.lookAhead(1) == T.COLON -> { parseNamedOrKeyed(builder, E.KEYED, depth); true }
-            else -> { if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Unexpected token"); false }
+            else -> { if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Expected an expression"); false }
         }
     }
 
@@ -554,7 +559,7 @@ class TypstParser : PsiParser {
             T.UNDERSCORE -> builder.advanceLexer()
             T.IDENTIFIER ->
                 if (builder.lookAhead(1) == T.COLON) parseNamedOrKeyed(builder, E.NAMED, depth) else builder.advanceLexer()
-            else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Unexpected token")
+            else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Expected a parameter")
         }
     }
 
@@ -571,7 +576,7 @@ class TypstParser : PsiParser {
                     T.IDENTIFIER ->
                         if (builder.lookAhead(1) == T.COLON) parseNamedOrKeyed(builder, E.NAMED, depth + 1) else builder.advanceLexer()
                     T.UNDERSCORE -> builder.advanceLexer()
-                    else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth + 1) else consumeErrorToken(builder, "Unexpected token")
+                    else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth + 1) else consumeErrorToken(builder, "Expected a pattern")
                 }
                 if (builder.tokenType == T.COMMA) builder.advanceLexer() else break
                 if (builder.rawTokenIndex() == before) break
@@ -662,12 +667,59 @@ class TypstParser : PsiParser {
         marker.done(type)
     }
 
-    /** Bounded single-token error leaf — never swallows more than the one offending token. */
-    private fun consumeErrorToken(builder: PsiBuilder, message: String) {
+    /**
+     * Bounded single-token error leaf — never swallows more than the one offending token. The final
+     * message is produced by [describeError]: a stray closer is named ("Unmatched ')'"), a lexer
+     * [TokenType.BAD_CHARACTER] becomes "Unexpected character 'x'", and any other token uses the
+     * caller's context-specific [expected] hint (e.g. "Expected an expression").
+     */
+    private fun consumeErrorToken(builder: PsiBuilder, expected: String) {
         val marker = builder.mark()
+        val message = describeError(builder, expected)
         builder.advanceLexer()
         marker.error(message)
     }
+
+    /**
+     * A zero-length error at the cursor that consumes nothing — the "expected X, but it is missing
+     * here" idiom. Only ever used at a point where the caller has already made forward progress, so it
+     * cannot stall a loop.
+     */
+    private fun markError(builder: PsiBuilder, message: String) {
+        builder.mark().error(message)
+    }
+
+    /** Contextual message for the token at the cursor; see [consumeErrorToken]. */
+    private fun describeError(builder: PsiBuilder, expected: String): String {
+        val type = builder.tokenType
+        return when {
+            type == TokenType.BAD_CHARACTER -> {
+                val text = builder.tokenText
+                if (text.isNullOrEmpty()) "Unexpected character" else "Unexpected character '$text'"
+            }
+            isCloser(type) -> unmatchedMessage(type)
+            else -> expected
+        }
+    }
+
+    /** Name a stray closing delimiter. */
+    private fun unmatchedMessage(type: IElementType?): String = when (type) {
+        T.RPAREN -> "Unmatched ')'"
+        T.RBRACE -> "Unmatched '}'"
+        T.RBRACKET -> "Unmatched ']'"
+        else -> "Unexpected token"
+    }
+
+    /** A code-only / stray token in markup position: name it (or let [describeError] upgrade it). */
+    private fun consumeUnexpectedInMarkup(builder: PsiBuilder) {
+        val text = builder.tokenText
+        val hint = if (text.isNullOrBlank()) "Unexpected token in markup" else "Unexpected '$text' in markup"
+        consumeErrorToken(builder, hint)
+    }
+
+    /** An assignment operator (`=`, `+=`, `-=`, `*=`, `/=`) — used to detect a `let` with no name. */
+    private fun isAssignOp(type: IElementType?): Boolean =
+        type == T.EQ || type == T.PLUS_EQ || type == T.MINUS_EQ || type == T.STAR_EQ || type == T.SLASH_EQ
 
     private data class BinaryOp(val precedence: Int, val rightAssociative: Boolean, val twoTokens: Boolean)
 

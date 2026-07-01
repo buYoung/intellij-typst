@@ -114,6 +114,19 @@ object TypstTextAttributeKeys {
         "TYPST_VARIABLE_DEFINITION", DefaultLanguageHighlighterColors.LOCAL_VARIABLE
     )
 
+    /**
+     * Read/usage of a variable — a `data` in `data.prefix`, an `x` used in an expression — resolved
+     * by [TypstAnnotator] through the file-local reference to a plain `#let v = …` binding. Distinct
+     * from [VARIABLE_DEFINITION] so users can color a definition and its reads differently, mirroring
+     * the [FUNCTION_DECLARATION] (definition) vs [FUNCTION_CALL] (usage) split. Falls back to the
+     * platform local-variable color; NOTE: that fallback is often the plain foreground in the default
+     * scheme, so reads may look uncolored until the user assigns a color in the color-settings page.
+     */
+    @JvmField
+    val VARIABLE: TextAttributesKey = createTextAttributesKey(
+        "TYPST_VARIABLE", DefaultLanguageHighlighterColors.LOCAL_VARIABLE
+    )
+
     /** Closure / function parameter name (`(x, y) => …`, `it => …`, `#let f(x) = …`). */
     @JvmField
     val PARAMETER: TextAttributesKey = createTextAttributesKey(

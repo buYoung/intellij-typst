@@ -136,6 +136,64 @@ class TypstAnnotatorTest : BasePlatformTestCase() {
         assertTrue("dict entries contribute no semantic highlight", TypstAnnotator.semanticHighlights(named).isEmpty())
     }
 
+    // ---- reference-usage (read) highlighting: colored by what the F1 reference resolves to ----
+
+    fun testVariableUsageGetsVariableKey() {
+        val file = myFixture.configureByText("test.typ", "#let v = 1\n#(v + 1)\n")
+        val usage = firstNodeOf(file, TypstElementTypes.REFERENCE_EXPR)
+        val highlights = TypstAnnotator.semanticHighlights(usage)
+        assertEquals("a resolved variable read contributes exactly one highlight", 1, highlights.size)
+        val (range, key) = highlights.single()
+        assertEquals("the variable read identifier is highlighted", "v", rangeText(file, range))
+        assertSame("a read resolving to a plain #let uses the variable key",
+            TypstTextAttributeKeys.VARIABLE, key)
+    }
+
+    fun testFunctionUsageAsValueGetsFunctionCallKey() {
+        // A function read that is NOT a call site (passed as a value) goes through the reference path.
+        val file = myFixture.configureByText("test.typ", "#let f() = 1\n#(f)\n")
+        val usage = firstNodeOf(file, TypstElementTypes.REFERENCE_EXPR)
+        val highlights = TypstAnnotator.semanticHighlights(usage)
+        assertEquals(1, highlights.size)
+        val (range, key) = highlights.single()
+        assertEquals("f", rangeText(file, range))
+        assertSame("a read resolving to a #let function uses the function-call key",
+            TypstTextAttributeKeys.FUNCTION_CALL, key)
+    }
+
+    fun testFunctionCalleeUsageIsColoredByTheCallNotTheReferencePath() {
+        val file = myFixture.configureByText("test.typ", "#let f() = 1\n#f()\n")
+        // The callee-position usage is deliberately skipped by the reference path...
+        val calleeUsage = firstNodeOf(file, TypstElementTypes.REFERENCE_EXPR)
+        assertTrue("a callee-position usage is not colored via the reference path",
+            TypstAnnotator.semanticHighlights(calleeUsage).isEmpty())
+        // ...and is colored exactly once, as a function call, by the call owner.
+        val call = firstNodeOf(file, TypstElementTypes.FUNC_CALL)
+        val callHighlights = TypstAnnotator.semanticHighlights(call)
+        assertEquals(1, callHighlights.size)
+        assertEquals("f", rangeText(file, callHighlights.single().first))
+        assertSame(TypstTextAttributeKeys.FUNCTION_CALL, callHighlights.single().second)
+    }
+
+    fun testParameterUsageGetsParameterKey() {
+        val file = myFixture.configureByText("test.typ", "#let g(x) = x + 1\n")
+        val usage = firstNodeOf(file, TypstElementTypes.REFERENCE_EXPR)
+        val highlights = TypstAnnotator.semanticHighlights(usage)
+        assertEquals(1, highlights.size)
+        val (range, key) = highlights.single()
+        assertEquals("x", rangeText(file, range))
+        assertSame("a read resolving to a parameter uses the parameter key",
+            TypstTextAttributeKeys.PARAMETER, key)
+    }
+
+    fun testUnresolvedUsageGetsNoSemanticKey() {
+        // Built-in / cross-file / undefined: no file-local definition → no color, and NOT an error.
+        val file = myFixture.configureByText("test.typ", "#(missingName + 1)\n")
+        val usage = firstNodeOf(file, TypstElementTypes.REFERENCE_EXPR)
+        assertTrue("an unresolved read contributes no semantic highlight",
+            TypstAnnotator.semanticHighlights(usage).isEmpty())
+    }
+
     private fun rangeText(file: PsiFile, range: com.intellij.openapi.util.TextRange): String =
         file.text.substring(range.startOffset, range.endOffset)
 

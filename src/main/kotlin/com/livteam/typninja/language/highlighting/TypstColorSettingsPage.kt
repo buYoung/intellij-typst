@@ -39,6 +39,7 @@ class TypstColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor(MyBundle.message("color.settings.typst.function.call"),        TypstTextAttributeKeys.FUNCTION_CALL),
             AttributesDescriptor(MyBundle.message("color.settings.typst.function.declaration"), TypstTextAttributeKeys.FUNCTION_DECLARATION),
             AttributesDescriptor(MyBundle.message("color.settings.typst.variable.definition"),  TypstTextAttributeKeys.VARIABLE_DEFINITION),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.variable"),             TypstTextAttributeKeys.VARIABLE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.parameter"),            TypstTextAttributeKeys.PARAMETER),
             AttributesDescriptor(MyBundle.message("color.settings.typst.named.argument"),       TypstTextAttributeKeys.NAMED_ARGUMENT),
             AttributesDescriptor(MyBundle.message("color.settings.typst.escape"),          TypstTextAttributeKeys.ESCAPE),
@@ -57,10 +58,11 @@ class TypstColorSettingsPage : ColorSettingsPage {
 
         /**
          * Preview overlays for the keys the lexer cannot emit: the contextual modifiers
-         * (`<strong>` / `<emph>`) and the PSI-driven semantic colors (`<fncall>` / `<fndecl>` /
-         * `<vardef>` / `<param>` / `<namedarg>`). The color-settings framework strips these tags from
-         * [DEMO_TEXT] before lexing and applies the mapped key on top, mirroring what [TypstAnnotator]
-         * does in a real editor.
+         * (`<strong>` / `<emph>`) and the PSI-driven semantic colors — definition keys
+         * (`<fndecl>` / `<vardef>`) and usage keys resolved through references
+         * (`<fncall>` / `<varref>` / `<param>` / `<namedarg>`). The color-settings framework strips
+         * these tags from [DEMO_TEXT] before lexing and applies the mapped key on top, mirroring what
+         * [TypstAnnotator] does in a real editor.
          */
         val TAG_TO_DESCRIPTOR: Map<String, TextAttributesKey> = mapOf(
             "strong" to TypstTextAttributeKeys.STRONG,
@@ -68,6 +70,7 @@ class TypstColorSettingsPage : ColorSettingsPage {
             "fncall" to TypstTextAttributeKeys.FUNCTION_CALL,
             "fndecl" to TypstTextAttributeKeys.FUNCTION_DECLARATION,
             "vardef" to TypstTextAttributeKeys.VARIABLE_DEFINITION,
+            "varref" to TypstTextAttributeKeys.VARIABLE,
             "param" to TypstTextAttributeKeys.PARAMETER,
             "namedarg" to TypstTextAttributeKeys.NAMED_ARGUMENT,
         )
@@ -101,12 +104,15 @@ See @intro and visit https://typst.app for details.
 
 #let <vardef>title</vardef> = "Hello, Typst!"
 #let <vardef>numbers</vardef> = (1, 2, 3)
-#let <fndecl>scale</fndecl>(<param>factor</param>) = factor * 2
+#let <fndecl>scale</fndecl>(<param>factor</param>) = <param>factor</param> * 2
 #let config = (width: 12pt, ratio: 1.5, flag: true, missing: none, mode: auto)
+
+// Usages resolve to their definitions: a variable read, a function read, a parameter read.
+#(<varref>title</varref>, <fncall>scale</fncall>(2))
 
 ${'$'} x^2 + y^2 <= z^2 ${'$'}
 
-#if numbers != none {
+#if <varref>numbers</varref> != none {
   "greater"
 } else {
   "fallback"

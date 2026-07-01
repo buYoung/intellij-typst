@@ -10,6 +10,7 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.psi.TypstElementTypes
+import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.psi.TypstTokenTypes
 
 /**
@@ -73,6 +74,7 @@ class TypstAnnotator : Annotator {
                 TypstElementTypes.PARAMS -> paramHighlights(node)
                 TypstElementTypes.CLOSURE -> closureParamHighlight(node)
                 TypstElementTypes.NAMED -> namedArgumentHighlight(node)
+                TypstElementTypes.REFERENCE_EXPR -> referenceUsageHighlight(node)
                 else -> emptyList()
             }
 
@@ -86,6 +88,8 @@ class TypstAnnotator : Annotator {
             val callee = firstMeaningfulChild(funcCall) ?: return emptyList()
             val nameNode = when (callee.elementType) {
                 TypstTokenTypes.IDENTIFIER -> callee
+                // A bare-identifier callee (`#table(…)`) is now wrapped in a REFERENCE_EXPR usage node.
+                TypstElementTypes.REFERENCE_EXPR -> firstDirectChildOfType(callee, TypstTokenTypes.IDENTIFIER)
                 TypstElementTypes.FIELD_ACCESS -> lastDirectIdentifier(callee)
                 else -> null
             } ?: return emptyList()
@@ -151,6 +155,48 @@ class TypstAnnotator : Annotator {
             if (named.treeParent?.elementType != TypstElementTypes.ARGS) return emptyList()
             val key = firstDirectChildOfType(named, TypstTokenTypes.IDENTIFIER) ?: return emptyList()
             return listOf(key.textRange to TypstTextAttributeKeys.NAMED_ARGUMENT)
+        }
+
+        /**
+         * A code-context identifier USAGE ([TypstElementTypes.REFERENCE_EXPR]) — a `data` in
+         * `data.prefix`, an `x` in an expression, the base `obj` of `obj.field`. It is colored by the
+         * kind of the definition its file-local reference (F1) resolves to, so reads share a color with
+         * their declaration site:
+         *  - resolves to a plain `#let v = …` → [TypstTextAttributeKeys.VARIABLE] (variable read),
+         *  - resolves to a `#let f(…) = …`   → [TypstTextAttributeKeys.FUNCTION_CALL] (function read),
+         *  - resolves to a parameter / closure-param / `#for` binding → [TypstTextAttributeKeys.PARAMETER],
+         *  - resolves to nothing (built-in, cross-file `#import`, undefined) → no color, NOT an error.
+         *
+         * A usage in CALLEE position (`f` in `#f(…)`) is skipped here: its color is owned by
+         * [calleeHighlight], which always paints the call site with the function-call key regardless of
+         * what the callee resolves to — so a syntactic call never flickers to a variable color.
+         */
+        private fun referenceUsageHighlight(reference: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
+            val parent = reference.treeParent
+            if (parent?.elementType == TypstElementTypes.FUNC_CALL && firstMeaningfulChild(parent) === reference) {
+                return emptyList()
+            }
+            val referenceExpression = reference.psi as? TypstReferenceExpression ?: return emptyList()
+            val target = referenceExpression.reference?.resolve() ?: return emptyList()
+            val key = keyForResolvedTarget(target) ?: return emptyList()
+            val nameNode = firstDirectChildOfType(reference, TypstTokenTypes.IDENTIFIER) ?: reference
+            return listOf(nameNode.textRange to key)
+        }
+
+        /**
+         * The semantic key for what a usage resolves to. The reference resolver only ever returns a
+         * definition NAME leaf: a `#let` bound name (its direct parent is the [TypstElementTypes.LET_BINDING]),
+         * or a parameter / for-loop binding identifier (everything else). A `#let` name that is directly
+         * followed by a [TypstElementTypes.PARAMS] list is a function definition; otherwise it is a value.
+         */
+        private fun keyForResolvedTarget(target: PsiElement): TextAttributesKey? {
+            val targetNode = target.node ?: return null
+            return if (targetNode.treeParent?.elementType == TypstElementTypes.LET_BINDING) {
+                val isFunction = nextMeaningfulSibling(targetNode)?.elementType == TypstElementTypes.PARAMS
+                if (isFunction) TypstTextAttributeKeys.FUNCTION_CALL else TypstTextAttributeKeys.VARIABLE
+            } else {
+                TypstTextAttributeKeys.PARAMETER
+            }
         }
 
         // ---- ASTNode navigation helpers (direct children only; whitespace/comments skipped) ----

@@ -70,6 +70,13 @@ object TypstElementTypes {
     @JvmField val FUNC_RETURN: IElementType = TypstElementType("FUNC_RETURN")
 
     // ---- code expressions ----
+    /**
+     * A code-context identifier USAGE (a variable/function reference). The parser wraps every plain
+     * identifier read in code context in this node so it can carry a [com.intellij.psi.PsiReference]
+     * (see [TypstReferenceExpression]); definition names, field members and named-argument keys are
+     * left as bare [TypstTokenTypes.IDENTIFIER] leaves and carry no reference.
+     */
+    @JvmField val REFERENCE_EXPR: IElementType = TypstElementType("REFERENCE_EXPR")
     @JvmField val FUNC_CALL: IElementType = TypstElementType("FUNC_CALL")
     @JvmField val ARGS: IElementType = TypstElementType("ARGS")
     @JvmField val FIELD_ACCESS: IElementType = TypstElementType("FIELD_ACCESS")
@@ -92,10 +99,15 @@ object TypstElementTypes {
     @JvmField val MATH_DELIMITED: IElementType = TypstElementType("MATH_DELIMITED")
 
     /**
-     * Factory used by the parser definition's `createElement`. Every Typst composite node maps to a
-     * single generic [TypstPsiElement]; the element type (above) carries the region identity. This
-     * keeps the PSI narrow while still exposing a typed, queryable tree; typed subclasses for the
-     * identifier-owning nodes can be added later without touching the parser.
+     * Factory used by the parser definition's `createElement`. Most Typst composite nodes map to the
+     * generic [TypstPsiElement] (the element type carries the region identity), but the nodes that
+     * participate in reference resolution get dedicated PSI classes: [LET_BINDING] is a
+     * [com.intellij.psi.PsiNameIdentifierOwner] declaration ([TypstLetBinding]) and [REFERENCE_EXPR]
+     * carries the usage's [com.intellij.psi.PsiReference] ([TypstReferenceExpression]).
      */
-    fun createElement(node: ASTNode): PsiElement = TypstPsiElement(node)
+    fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
+        LET_BINDING -> TypstLetBinding(node)
+        REFERENCE_EXPR -> TypstReferenceExpression(node)
+        else -> TypstPsiElement(node)
+    }
 }
