@@ -1,19 +1,47 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.livteam.typninja</id>
-    <name>intellij-typst</name>
+    <name>Typst</name>
     <vendor>buyoung</vendor>
     <description><![CDATA[
-        <p><b>intellij-typst</b> is a repository that provides a pure template to make it easier to create a new plugin project.</p>
-        <p>The main goal of this template is to speed up the setup phase of plugin development for both new and experienced developers by preconfiguring the project scaffold and CI, linking to the proper documentation pages, and keeping everything organized.</p>
+        <p>Native <b>Typst</b> language support for IntelliJ-based IDEs.</p>
+        <ul>
+            <li>Recognises <code>.typ</code> files as Typst source files.</li>
+            <li>Lexer-based syntax highlighting with customisable colour settings (Settings → Editor → Color Scheme → Typst).</li>
+            <li>Recoverable parser and PSI that keeps the editor usable on incomplete or malformed input.</li>
+            <li>Conservative code formatter — normalises spacing and indentation inside closed code groups (including multi-line blocks, arrays and dictionaries) while preserving markup prose. Indentation follows Settings → Code Style → Typst.</li>
+            <li>Brace matching for <code>()</code>, <code>{}</code> and <code>[]</code>, and code folding for closed multi-line blocks, groups and content blocks.</li>
+            <li>Line-comment toggling (<code>//</code>) via the standard Code → Comment with Line Comment action.</li>
+        </ul>
+        <p>This is an MVP release. Completion, reference resolution, documentation lookup, and Typst rendering are not included.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
+    <!-- Language and file type registrations -->
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.livteam.typninja.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
-        <postStartupActivity implementation="com.livteam.typninja.startup.MyProjectActivity" />
+        <fileType name="Typst"
+                  implementationClass="com.livteam.typninja.language.TypstFileType"
+                  fieldName="INSTANCE"
+                  language="Typst"
+                  extensions="typ"/>
+        <lang.parserDefinition language="Typst"
+                               implementationClass="com.livteam.typninja.language.parser.TypstParserDefinition"/>
+        <lang.syntaxHighlighterFactory language="Typst"
+                                        implementationClass="com.livteam.typninja.language.highlighting.TypstSyntaxHighlighterFactory"/>
+        <colorSettingsPage implementation="com.livteam.typninja.language.highlighting.TypstColorSettingsPage"/>
+        <lang.formatter language="Typst"
+                        implementationClass="com.livteam.typninja.language.formatting.TypstFormattingModelBuilder"/>
+        <lang.commenter language="Typst"
+                        implementationClass="com.livteam.typninja.language.TypstCommenter"/>
+        <langCodeStyleSettingsProvider
+                implementation="com.livteam.typninja.language.formatting.TypstLanguageCodeStyleSettingsProvider"/>
+        <lang.braceMatcher language="Typst"
+                           implementationClass="com.livteam.typninja.language.TypstBraceMatcher"/>
+        <lang.foldingBuilder language="Typst"
+                             implementationClass="com.livteam.typninja.language.folding.TypstFoldingBuilder"/>
     </extensions>
+
 </idea-plugin>
