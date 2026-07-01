@@ -36,29 +36,49 @@ class TypstColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor(MyBundle.message("color.settings.typst.operator"),        TypstTextAttributeKeys.OPERATOR),
             AttributesDescriptor(MyBundle.message("color.settings.typst.delimiter"),       TypstTextAttributeKeys.DELIMITER),
             AttributesDescriptor(MyBundle.message("color.settings.typst.identifier"),      TypstTextAttributeKeys.IDENTIFIER),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.function.call"),        TypstTextAttributeKeys.FUNCTION_CALL),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.function.declaration"), TypstTextAttributeKeys.FUNCTION_DECLARATION),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.variable.definition"),  TypstTextAttributeKeys.VARIABLE_DEFINITION),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.parameter"),            TypstTextAttributeKeys.PARAMETER),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.named.argument"),       TypstTextAttributeKeys.NAMED_ARGUMENT),
             AttributesDescriptor(MyBundle.message("color.settings.typst.escape"),          TypstTextAttributeKeys.ESCAPE),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.heading"),         TypstTextAttributeKeys.HEADING),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.list.marker"),     TypstTextAttributeKeys.LIST_MARKER),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.strong"),          TypstTextAttributeKeys.STRONG),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.emphasis"),        TypstTextAttributeKeys.EMPH),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.markup.entity"),   TypstTextAttributeKeys.MARKUP_ENTITY),
             AttributesDescriptor(MyBundle.message("color.settings.typst.reference"),       TypstTextAttributeKeys.REFERENCE),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.label"),           TypstTextAttributeKeys.LABEL),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.link"),            TypstTextAttributeKeys.LINK),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.math.identifier"), TypstTextAttributeKeys.MATH_IDENT),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.math.operator"),   TypstTextAttributeKeys.MATH_OPERATOR),
             AttributesDescriptor(MyBundle.message("color.settings.typst.bad.character"),   TypstTextAttributeKeys.BAD_CHARACTER),
         )
 
         /**
-         * Representative Typst demo snippet.
-         *
-         * Exercises all token categories:
-         * - LINE_COMMENT, BLOCK_COMMENT
-         * - HASH, DOLLAR, KW_* (keywords)
-         * - TRUE, FALSE, NONE, AUTO (keyword literals)
-         * - STRING, RAW_TEXT
-         * - INTEGER_LITERAL, FLOAT_LITERAL
-         * - IDENTIFIER
-         * - OPERATOR (arithmetic, comparison, assignment, punctuation)
-         * - DELIMITER (parens, braces, brackets)
-         * - ESCAPE
-         * - REFERENCE (@label sigil in markup)
-         * - BAD_CHARACTER (@ in pure code context)
-         * - TEXT (plain markup prose, content-block prose)
-         *
-         * Multi-line code blocks (#if, #table) highlight correctly after R3 lexer fix.
+         * Preview overlays for the keys the lexer cannot emit: the contextual modifiers
+         * (`<strong>` / `<emph>`) and the PSI-driven semantic colors (`<fncall>` / `<fndecl>` /
+         * `<vardef>` / `<param>` / `<namedarg>`). The color-settings framework strips these tags from
+         * [DEMO_TEXT] before lexing and applies the mapped key on top, mirroring what [TypstAnnotator]
+         * does in a real editor.
+         */
+        val TAG_TO_DESCRIPTOR: Map<String, TextAttributesKey> = mapOf(
+            "strong" to TypstTextAttributeKeys.STRONG,
+            "emph" to TypstTextAttributeKeys.EMPH,
+            "fncall" to TypstTextAttributeKeys.FUNCTION_CALL,
+            "fndecl" to TypstTextAttributeKeys.FUNCTION_DECLARATION,
+            "vardef" to TypstTextAttributeKeys.VARIABLE_DEFINITION,
+            "param" to TypstTextAttributeKeys.PARAMETER,
+            "namedarg" to TypstTextAttributeKeys.NAMED_ARGUMENT,
+        )
+
+        /**
+         * Representative Typst demo snippet. Exercises every color category: comments, code/math
+         * markers, keywords and keyword literals, strings and raw text, numbers and measurements,
+         * identifiers, operators and delimiters, escapes, headings, list/enum/term markers, strong and
+         * emphasis, the semantic colors (function call/declaration, variable definition, parameter,
+         * named argument — all via preview tags), references, labels, links, math tokens, multi-line
+         * code blocks/arrays/dictionaries, and a BAD_CHARACTER in code context.
          */
         val DEMO_TEXT: String = """
 // Line comment: document preamble
@@ -67,42 +87,44 @@ class TypstColorSettingsPage : ColorSettingsPage {
 
 #import "utils.typ": helper
 
-#let title = "Hello, Typst!"
-#let count = 42
-#let ratio = 1.5
-#let flag = true
-#let missing = none
-#let mode = auto
-
 = Heading
+== Subheading
 
-This is plain text with an \escape sequence.
+Plain prose with an \escape and a <strong>*bold*</strong> plus <emph>_italic_</emph> run.
 
-See @introduction and @fig:1 for details.
+- First bullet
+- Second bullet
++ Numbered item
+/ Term: its definition
 
-#emph[Prose inside a content block — #strong[nested markup] works too.]
+See @intro and visit https://typst.app for details.
 
-${'$'}x^2 + y^2 = z^2${'$'}
+#let <vardef>title</vardef> = "Hello, Typst!"
+#let <vardef>numbers</vardef> = (1, 2, 3)
+#let <fndecl>scale</fndecl>(<param>factor</param>) = factor * 2
+#let config = (width: 12pt, ratio: 1.5, flag: true, missing: none, mode: auto)
 
-#if flag {
+${'$'} x^2 + y^2 <= z^2 ${'$'}
+
+#if numbers != none {
   "greater"
-} else if count != 0 {
-  "nonzero"
+} else {
+  "fallback"
 }
 
-#table(
-  columns: 2,
+#<fncall>table</fncall>(
+  <namedarg>columns</namedarg>: 2,
   "Name", "Value",
   "alpha", "1",
   "beta",  "2",
 )
 
-#show heading: it => it
-#set text(size: 12pt)
+#show heading: <param>it</param> => it
+#set <fncall>text</fncall>(<namedarg>size</namedarg>: 12pt)
 
 `inline raw`
 
-// Bad character in code context (@  is not valid inside #{...}):
+// Bad character in code context (@ is not valid inside #{...}):
 #{ @ }
 """.trimIndent()
     }
@@ -119,6 +141,6 @@ ${'$'}x^2 + y^2 = z^2${'$'}
 
     override fun getColorDescriptors(): Array<ColorDescriptor> = ColorDescriptor.EMPTY_ARRAY
 
-    /** No custom XML-tag-based additional highlighting; the lexer handles all token coloring. */
-    override fun getAdditionalHighlightingTagToDescriptorMap(): Map<String, TextAttributesKey>? = null
+    /** Maps the `<strong>` / `<emph>` preview tags in [DEMO_TEXT] to their contextual-modifier keys. */
+    override fun getAdditionalHighlightingTagToDescriptorMap(): Map<String, TextAttributesKey> = TAG_TO_DESCRIPTOR
 }

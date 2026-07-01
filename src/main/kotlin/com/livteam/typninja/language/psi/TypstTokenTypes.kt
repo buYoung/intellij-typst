@@ -5,8 +5,8 @@ import com.intellij.psi.tree.IElementType
 /**
  * Stable Typst token-type contract (Typst 0.15.0 MVP baseline).
  *
- * Every field is a `public static final IElementType` (via [JvmField]) so the generated JFlex
- * lexer (`_TypstLexer`, written in Java) can reference them as `TypstTokenTypes.<NAME>`.
+ * Every field is exposed as a `public static final IElementType` (via [JvmField]) so it can be
+ * referenced uniformly as `TypstTokenTypes.<NAME>` from the hand-written lexer and parser.
  *
  * These names are a CONTRACT consumed verbatim by:
  *   - phase 05 (parser / `Typst.bnf` token declarations),
@@ -72,16 +72,54 @@ object TypstTokenTypes {
     @JvmField val COLON: IElementType = TypstTokenType("COLON")
     @JvmField val ARROW: IElementType = TypstTokenType("ARROW")
     @JvmField val HAT: IElementType = TypstTokenType("HAT")
-    /** `@` — reference sigil in markup (`@label`). */
-    @JvmField val AT: IElementType = TypstTokenType("AT")
+    /** `_` — markup emphasis toggle / code destructuring placeholder / math subscript. */
+    @JvmField val UNDERSCORE: IElementType = TypstTokenType("UNDERSCORE")
+
+    // ---- markup markers (line-start / inline) ----
+    /** Blank line (>= 2 newlines). A REAL token (not whitespace) marking a paragraph boundary. */
+    @JvmField val PARBREAK: IElementType = TypstTokenType("PARBREAK")
+    /** Trailing `\` line break in markup. */
+    @JvmField val LINEBREAK: IElementType = TypstTokenType("LINEBREAK")
+    /** `~`, `--`, `---`, `...` markup shorthands. */
+    @JvmField val SHORTHAND: IElementType = TypstTokenType("SHORTHAND")
+    /** `'` / `"` smart quote in markup. */
+    @JvmField val SMART_QUOTE: IElementType = TypstTokenType("SMART_QUOTE")
+    /** Line-start `=`+ heading marker. */
+    @JvmField val HEADING_MARKER: IElementType = TypstTokenType("HEADING_MARKER")
+    /** Line-start `- ` list marker. */
+    @JvmField val LIST_MARKER: IElementType = TypstTokenType("LIST_MARKER")
+    /** Line-start `+ ` / `1. ` enum marker. */
+    @JvmField val ENUM_MARKER: IElementType = TypstTokenType("ENUM_MARKER")
+    /** Line-start `/ ` term-list marker. */
+    @JvmField val TERM_MARKER: IElementType = TypstTokenType("TERM_MARKER")
+    /** `http://…` / `https://…` bare auto-link. */
+    @JvmField val LINK: IElementType = TypstTokenType("LINK")
+    /** `<name>` label definition. */
+    @JvmField val LABEL_DEF: IElementType = TypstTokenType("LABEL_DEF")
+    /** `@target` reference emitted as one whole-span token (there is no separate `@`-sigil token). */
+    @JvmField val REF_MARKER: IElementType = TypstTokenType("REF_MARKER")
+
+    // ---- math tokens ----
+    /** Math identifier (`alpha`, `x`). */
+    @JvmField val MATH_IDENT: IElementType = TypstTokenType("MATH_IDENT")
+    /** Math single fragment / symbol run. */
+    @JvmField val MATH_TEXT: IElementType = TypstTokenType("MATH_TEXT")
+    /** Math shorthand (`<=`, `->`, `!=`, …). */
+    @JvmField val MATH_SHORTHAND: IElementType = TypstTokenType("MATH_SHORTHAND")
+    /** Math alignment point `&`. */
+    @JvmField val MATH_ALIGN: IElementType = TypstTokenType("MATH_ALIGN")
+    /** Math primes run (`a'`, `a''`). */
+    @JvmField val MATH_PRIMES: IElementType = TypstTokenType("MATH_PRIMES")
 
     // ---- identifier ----
     @JvmField val IDENTIFIER: IElementType = TypstTokenType("IDENTIFIER")
 
     // ---- literal (numeric + keyword literals) ----
     @JvmField val INTEGER_LITERAL: IElementType = TypstTokenType("INTEGER_LITERAL")
-    /** Float, exponent, and length/angle/ratio measurements (e.g. `1.5`, `12pt`, `50%`). */
+    /** Pure float / exponent (e.g. `1.5`, `2e10`). Measurements are split out into [NUMERIC_LITERAL]. */
     @JvmField val FLOAT_LITERAL: IElementType = TypstTokenType("FLOAT_LITERAL")
+    /** Length / angle / ratio / fraction measurement (e.g. `12pt`, `50%`, `30deg`, `2em`, `1fr`). */
+    @JvmField val NUMERIC_LITERAL: IElementType = TypstTokenType("NUMERIC_LITERAL")
     @JvmField val TRUE: IElementType = TypstTokenType("TRUE")
     @JvmField val FALSE: IElementType = TypstTokenType("FALSE")
     @JvmField val NONE: IElementType = TypstTokenType("NONE")

@@ -31,6 +31,8 @@
                                implementationClass="com.livteam.typninja.language.parser.TypstParserDefinition"/>
         <lang.syntaxHighlighterFactory language="Typst"
                                         implementationClass="com.livteam.typninja.language.highlighting.TypstSyntaxHighlighterFactory"/>
+        <annotator language="Typst"
+                   implementationClass="com.livteam.typninja.language.highlighting.TypstAnnotator"/>
         <colorSettingsPage implementation="com.livteam.typninja.language.highlighting.TypstColorSettingsPage"/>
         <lang.formatter language="Typst"
                         implementationClass="com.livteam.typninja.language.formatting.TypstFormattingModelBuilder"/>

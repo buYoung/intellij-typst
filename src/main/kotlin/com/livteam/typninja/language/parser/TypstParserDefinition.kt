@@ -11,7 +11,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IFileElementType
 import com.intellij.psi.tree.TokenSet
-import com.livteam.typninja.language.lexer.TypstLexerAdapter
+import com.livteam.typninja.language.lexer.TypstLexer
 import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstFile
 import com.livteam.typninja.language.psi.TypstFileElementType
@@ -20,16 +20,20 @@ import com.livteam.typninja.language.psi.TypstTokenTypes
 /**
  * Wires the Typst language into the IntelliJ custom-language pipeline.
  *
- * Token bridging: [createLexer] returns a fresh [TypstLexerAdapter], whose generated `_TypstLexer`
- * emits the exact [TypstTokenTypes] instances. [TypstParser] navigates the [com.intellij.lang.PsiBuilder]
- * by comparing `getTokenType()` against those same [TypstTokenTypes] constants, so the parser
- * consumes precisely what the lexer produces (no second, mismatched token set is generated).
+ * Token bridging: [createLexer] returns a fresh [TypstLexer] (a hand-written, restartable
+ * `LexerBase` + `RestartableLexer`), which emits the exact [TypstTokenTypes] instances. [TypstParser]
+ * navigates the [com.intellij.lang.PsiBuilder] by comparing `getTokenType()` against those same
+ * [TypstTokenTypes] constants, so the parser consumes precisely what the lexer produces (no second,
+ * mismatched token set is generated).
+ *
+ * `PARBREAK` is intentionally NOT a whitespace token: a paragraph break is a real, parser-visible
+ * marker (design "Modes & transitions"), so it is excluded from [WHITESPACES].
  *
  * Registered via `<lang.parserDefinition language="Typst" .../>`.
  */
 class TypstParserDefinition : ParserDefinition {
 
-    override fun createLexer(project: Project?): Lexer = TypstLexerAdapter()
+    override fun createLexer(project: Project?): Lexer = TypstLexer()
 
     override fun createParser(project: Project?): PsiParser = TypstParser()
 

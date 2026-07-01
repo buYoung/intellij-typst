@@ -46,14 +46,24 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
 
     override fun getPlaceholderText(node: ASTNode): String = when (node.elementType) {
         TypstElementTypes.CODE_BLOCK -> "{...}"
-        TypstElementTypes.PAREN_GROUP -> "(...)"
         TypstElementTypes.CONTENT_BLOCK -> "[...]"
+        in PAREN_GROUPS -> "(...)"
         else -> "..."
     }
 
     override fun isCollapsedByDefault(node: ASTNode): Boolean = false
 
     private companion object {
+
+        /** Paren-delimited group nodes produced by the P3 grammar (args / arrays / dicts / params). */
+        private val PAREN_GROUPS: Set<IElementType> = setOf(
+            TypstElementTypes.ARGS,
+            TypstElementTypes.ARRAY,
+            TypstElementTypes.DICT,
+            TypstElementTypes.PARAMS,
+            TypstElementTypes.PARENTHESIZED,
+            TypstElementTypes.DESTRUCTURING,
+        )
 
         private fun isFoldable(node: ASTNode, document: Document): Boolean {
             val closer = closerFor(node.elementType) ?: return false
@@ -63,10 +73,10 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
             return document.getLineNumber(range.startOffset) < document.getLineNumber(range.endOffset)
         }
 
-        private fun closerFor(type: IElementType): IElementType? = when (type) {
-            TypstElementTypes.CODE_BLOCK -> TypstTokenTypes.RBRACE
-            TypstElementTypes.PAREN_GROUP -> TypstTokenTypes.RPAREN
-            TypstElementTypes.CONTENT_BLOCK -> TypstTokenTypes.RBRACKET
+        private fun closerFor(type: IElementType): IElementType? = when {
+            type == TypstElementTypes.CODE_BLOCK -> TypstTokenTypes.RBRACE
+            type == TypstElementTypes.CONTENT_BLOCK -> TypstTokenTypes.RBRACKET
+            type in PAREN_GROUPS -> TypstTokenTypes.RPAREN
             else -> null
         }
 

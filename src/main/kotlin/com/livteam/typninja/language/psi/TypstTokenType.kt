@@ -9,7 +9,7 @@ import org.jetbrains.annotations.NonNls
  *
  * Each instance is bound to [TypstLanguage] so the platform can attribute the token to the
  * Typst language. Instances are created once in [TypstTokenTypes] and are referenced by the
- * generated lexer (`_TypstLexer`) and by downstream phases (parser, highlighter, commenter).
+ * hand-written lexer (`TypstLexer`) and by downstream phases (parser, highlighter, commenter).
  *
  * The [toString] override keeps debug output (e.g. PSI viewer, lexer dumps) readable.
  */

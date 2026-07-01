@@ -87,44 +87,85 @@ class TypstBlock(
 
     private companion object {
 
+        /**
+         * Paren-delimited group nodes (`( … )`): arguments, arrays, dictionaries, parameter lists,
+         * parenthesized expressions and destructuring patterns. The P3 grammar produces these finer
+         * nodes in place of the removed legacy `PAREN_GROUP`; they all format identically (structural
+         * indent when closed, verbatim leaf when unclosed).
+         */
+        private val PAREN_GROUPS: Set<IElementType> = setOf(
+            TypstElementTypes.ARGS,
+            TypstElementTypes.ARRAY,
+            TypstElementTypes.DICT,
+            TypstElementTypes.PARAMS,
+            TypstElementTypes.PARENTHESIZED,
+            TypstElementTypes.DESTRUCTURING,
+        )
+
+        /**
+         * Non-brace code wrappers: `#`-expressions, function calls, closures, statements and
+         * destructuring assignments. They recurse (so nested closed groups/blocks get tidied and the
+         * spacing rules in [TypstSpacingBuilder] normalise `=` / `:` / `,` between their direct
+         * children — e.g. `#let a=1` → `#let a = 1`), but add no structural indent of their own, so a
+         * statement's own tokens stay at the parent column. Any markup they contain lives inside a
+         * [TypstElementTypes.CONTENT_BLOCK] (a preserve container), so prose is never rewritten.
+         */
+        private val CODE_WRAPPERS: Set<IElementType> = setOf(
+            TypstElementTypes.CODE_EXPRESSION,
+            TypstElementTypes.FUNC_CALL,
+            TypstElementTypes.CLOSURE,
+            TypstElementTypes.LET_BINDING,
+            TypstElementTypes.SET_RULE,
+            TypstElementTypes.SHOW_RULE,
+            TypstElementTypes.CONTEXTUAL,
+            TypstElementTypes.CONDITIONAL,
+            TypstElementTypes.WHILE_LOOP,
+            TypstElementTypes.FOR_LOOP,
+            TypstElementTypes.MODULE_IMPORT,
+            TypstElementTypes.IMPORT_ITEMS,
+            TypstElementTypes.MODULE_INCLUDE,
+            TypstElementTypes.LOOP_BREAK,
+            TypstElementTypes.LOOP_CONTINUE,
+            TypstElementTypes.FUNC_RETURN,
+            TypstElementTypes.DESTRUCT_ASSIGNMENT,
+        )
+
         private fun computeKind(node: ASTNode): Kind {
             if (node.elementType is IFileElementType) return Kind.PRESERVE_CONTAINER
-            return when (node.elementType) {
-                TypstElementTypes.MARKUP,
-                TypstElementTypes.RAW,
-                TypstElementTypes.STRING_LITERAL,
-                TypstElementTypes.LABEL,
-                -> Kind.LEAF
+            val type = node.elementType
+            return when {
+                type == TypstElementTypes.MATH ||
+                    type == TypstElementTypes.CONTENT_BLOCK -> Kind.PRESERVE_CONTAINER
 
-                TypstElementTypes.MATH,
-                TypstElementTypes.CONTENT_BLOCK,
-                -> Kind.PRESERVE_CONTAINER
+                // Code wrappers/statements that must recurse so their nested groups get tidied and
+                // their inter-child spacing gets normalised, but that add no structural indent
+                // themselves (they are not brace-like).
+                type in CODE_WRAPPERS -> Kind.CODE_CONTAINER
 
-                TypstElementTypes.CODE_EXPRESSION -> Kind.CODE_CONTAINER
-
-                TypstElementTypes.PAREN_GROUP ->
+                type in PAREN_GROUPS ->
                     if (isClosed(node, TypstTokenTypes.RPAREN)) Kind.CODE_CONTAINER else Kind.LEAF
 
-                TypstElementTypes.CODE_BLOCK ->
+                type == TypstElementTypes.CODE_BLOCK ->
                     if (isClosed(node, TypstTokenTypes.RBRACE)) Kind.CODE_CONTAINER else Kind.LEAF
 
-                // Token leaves (identifiers, keywords, operators, comments) and error elements.
+                // Markup prose, atomic expressions, binary/unary/field-access wrappers, token leaves
+                // and error elements are all preserved verbatim (conservative formatting).
                 else -> Kind.LEAF
             }
         }
 
         private fun isBraceLikeGroup(type: IElementType): Boolean =
-            type == TypstElementTypes.PAREN_GROUP || type == TypstElementTypes.CODE_BLOCK
+            type in PAREN_GROUPS || type == TypstElementTypes.CODE_BLOCK
 
-        private fun isOpener(parentType: IElementType, childType: IElementType): Boolean = when (parentType) {
-            TypstElementTypes.PAREN_GROUP -> childType == TypstTokenTypes.LPAREN
-            TypstElementTypes.CODE_BLOCK -> childType == TypstTokenTypes.LBRACE
+        private fun isOpener(parentType: IElementType, childType: IElementType): Boolean = when {
+            parentType in PAREN_GROUPS -> childType == TypstTokenTypes.LPAREN
+            parentType == TypstElementTypes.CODE_BLOCK -> childType == TypstTokenTypes.LBRACE
             else -> false
         }
 
-        private fun isCloser(parentType: IElementType, childType: IElementType): Boolean = when (parentType) {
-            TypstElementTypes.PAREN_GROUP -> childType == TypstTokenTypes.RPAREN
-            TypstElementTypes.CODE_BLOCK -> childType == TypstTokenTypes.RBRACE
+        private fun isCloser(parentType: IElementType, childType: IElementType): Boolean = when {
+            parentType in PAREN_GROUPS -> childType == TypstTokenTypes.RPAREN
+            parentType == TypstElementTypes.CODE_BLOCK -> childType == TypstTokenTypes.RBRACE
             else -> false
         }
 

@@ -60,6 +60,37 @@ class TypstFormatterTest : BasePlatformTestCase() {
         assertEquals("multi-line code-block formatting must be idempotent", once, twice)
     }
 
+    fun testLetBindingAssignmentSpacingIsNormalised() {
+        val (once, twice) = reformatTwice("#let a=1\n")
+        assertEquals("assignment must gain a space on each side of =", "#let a = 1\n", once)
+        assertEquals("statement spacing must be idempotent", once, twice)
+    }
+
+    fun testMultilineArrayInsideLetIsIndentedAndStable() {
+        val input = "#let xs = (\n1,\n2,\n3,\n)\n"
+        val (once, twice) = reformatTwice(input)
+        val bodyLine = once.lines().first { it.trim() == "1," }
+        assertTrue("the array body must be indented", bodyLine.first().isWhitespace())
+        assertEquals("multi-line array formatting must be idempotent", once, twice)
+    }
+
+    fun testMultilineDictIsIndentedAndStable() {
+        val input = "#let cfg = (\na: 1,\nb: 2,\n)\n"
+        val (once, twice) = reformatTwice(input)
+        val bodyLine = once.lines().first { it.contains("a: 1") }
+        assertTrue("the dictionary body must be indented", bodyLine.first().isWhitespace())
+        assertTrue("named entries keep `key: value` spacing", once.contains("a: 1"))
+        assertEquals("multi-line dictionary formatting must be idempotent", once, twice)
+    }
+
+    fun testMultilineFuncCallArgsIsIndentedAndStable() {
+        val input = "#figure(\nimage(\"a.png\"),\ncaption: \"c\",\n)\n"
+        val (once, twice) = reformatTwice(input)
+        val bodyLine = once.lines().first { it.contains("caption") }
+        assertTrue("the argument list body must be indented", bodyLine.first().isWhitespace())
+        assertEquals("multi-line argument formatting must be idempotent", once, twice)
+    }
+
     fun testMarkupProseIsPreserved() {
         val input = "This  is    prose with *emphasis*  and  odd   spacing.\n"
         assertEquals("markup prose spacing must never be rewritten", input, reformat(input))

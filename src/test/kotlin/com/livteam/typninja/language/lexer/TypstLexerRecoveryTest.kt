@@ -6,8 +6,8 @@ import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.livteam.typninja.language.psi.TypstTokenTypes
 
 /**
- * Golden lexer-recovery tests locking the invariants R3 fixed. Drives [TypstLexerAdapter] directly
- * and asserts on the emitted token stream (type + text), so the checks are deterministic and do not
+ * Golden lexer-recovery tests locking the invariants R3 fixed. Drives [TypstLexer] directly and
+ * asserts on the emitted token stream (type + text), so the checks are deterministic and do not
  * depend on any external gold file.
  */
 class TypstLexerRecoveryTest : BasePlatformTestCase() {
@@ -15,7 +15,7 @@ class TypstLexerRecoveryTest : BasePlatformTestCase() {
     private data class Token(val type: IElementType, val text: String)
 
     private fun lex(input: String): List<Token> {
-        val lexer = TypstLexerAdapter()
+        val lexer = TypstLexer()
         lexer.start(input, 0, input.length, 0)
         val tokens = ArrayList<Token>()
         while (true) {

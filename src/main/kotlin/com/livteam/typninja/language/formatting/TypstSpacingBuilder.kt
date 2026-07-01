@@ -80,8 +80,8 @@ class TypstSpacingBuilder(settings: CodeStyleSettings) {
             TypstTokenTypes.RBRACKET,
         )
 
-        // Arithmetic (+ - * /), DOT, DOT_DOT, HAT and AT are intentionally excluded: they can be
-        // unary, markup-derived, kebab-identifier, field-access or spread, so spacing them is unsafe.
+        // Arithmetic (+ - * /), DOT, DOT_DOT and HAT are intentionally excluded: they can be unary,
+        // markup-derived, kebab-identifier, field-access or spread, so spacing them is unsafe.
         private val BINARY_OPERATORS = setOf(
             TypstTokenTypes.EQ,
             TypstTokenTypes.EQ_EQ,
