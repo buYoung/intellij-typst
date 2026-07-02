@@ -139,6 +139,25 @@ object TypstTextAttributeKeys {
         "TYPST_NAMED_ARGUMENT", DefaultLanguageHighlighterColors.PARAMETER
     )
 
+    /**
+     * A Typst standard-library builtin FUNCTION used as a value (`image`, `table`, …) — mirrors
+     * tinymist's `support.function.builtin` scope. Distinct from a user [FUNCTION_CALL] so stdlib names
+     * read as "provided by Typst". Falls back to the platform static-method color (theme-following).
+     */
+    @JvmField
+    val BUILTIN_FUNCTION: TextAttributesKey = createTextAttributesKey(
+        "TYPST_BUILTIN_FUNCTION", DefaultLanguageHighlighterColors.STATIC_METHOD
+    )
+
+    /**
+     * A Typst builtin TYPE (`int`, `length`, `color`, …) — mirrors tinymist's
+     * `entity.name.type.primitive` scope. Falls back to the platform class-name color (theme-following).
+     */
+    @JvmField
+    val BUILTIN_TYPE: TextAttributesKey = createTextAttributesKey(
+        "TYPST_BUILTIN_TYPE", DefaultLanguageHighlighterColors.CLASS_NAME
+    )
+
     // ---- escape ----
     @JvmField
     val ESCAPE: TextAttributesKey = createTextAttributesKey(

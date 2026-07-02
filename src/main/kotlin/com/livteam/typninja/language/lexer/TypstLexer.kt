@@ -403,10 +403,15 @@ class TypstLexer : LexerBase(), RestartableLexer {
         }
     }
 
-    /** `@target` reference — the sigil plus a run of identifier / `:` / `.` characters. */
+    /**
+     * `@target` reference — the sigil plus a run of identifier / `:` / `.` characters. A TRAILING `.`
+     * is not part of the reference (typst's rule): `@intro.` at a sentence end is `@intro` + literal
+     * `.`, so trailing dots are given back and the name matches the `<intro>` label.
+     */
     private fun scanRef() {
         var end = position + 1
         while (end < bufferEndOffset && (isIdentPart(buffer[end]) || buffer[end] == ':' || buffer[end] == '.')) end++
+        while (end > position + 1 && buffer[end - 1] == '.') end-- // drop trailing dot(s)
         emit(TypstTokenTypes.REF_MARKER, end)
     }
 

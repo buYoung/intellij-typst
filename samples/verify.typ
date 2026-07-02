@@ -55,3 +55,26 @@ See #ref; also #value: and #x!
 #let add = (x, y) => x + y
 #let config = (width: 10pt, height: 50%, debug: true)
 #table(columns: 2, [a], [b], [c], [d])
+
+// ============================================================
+// [참조 이동 검증] 아래 항목들에 커서를 두고 Cmd+Click(또는 Cmd+B) 하세요.
+// ============================================================
+
+// ---- [파일 내부 이동] add / config 사용처 → 위의 #let 정의로 이동 ----
+#let total = add(1, 2)
+결과 폭: #config
+
+// ---- [라벨/참조 이동] @intro → 아래 <intro> 라벨로 이동 ----
+자세한 내용은 @intro 를 보세요.
+= 소개 <intro>
+
+// ---- [다른 파일 #import 이동] 경로 문자열 → utils.typ, scale-size/project-title → utils.typ 정의 ----
+#import "utils.typ": scale-size, project-title
+#let scaled = scale-size(10pt, 2)
+제목: #project-title
+
+// ---- [내장 심볼 이동/색상] image·table·counter → 내장 스텁으로 이동, 색상 구분 ----
+#let img = image
+#let c = counter("x")
+#let kind = type(3)
+

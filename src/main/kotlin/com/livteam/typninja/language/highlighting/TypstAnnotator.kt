@@ -12,6 +12,8 @@ import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.psi.TypstTokenTypes
+import com.livteam.typninja.language.references.TypstBuiltinResolver
+import com.livteam.typninja.language.references.TypstBuiltins
 
 /**
  * PSI-driven highlighting annotator for Typst (FDD 9.2 contextual modifiers + semantic colors).
@@ -69,6 +71,7 @@ class TypstAnnotator : Annotator {
          */
         fun semanticHighlights(node: ASTNode): List<Pair<TextRange, TextAttributesKey>> =
             when (node.elementType) {
+                TypstElementTypes.HEADING -> headingHighlight(node)
                 TypstElementTypes.FUNC_CALL -> calleeHighlight(node)
                 TypstElementTypes.LET_BINDING -> letNameHighlight(node)
                 TypstElementTypes.PARAMS -> paramHighlights(node)
@@ -77,6 +80,38 @@ class TypstAnnotator : Annotator {
                 TypstElementTypes.REFERENCE_EXPR -> referenceUsageHighlight(node)
                 else -> emptyList()
             }
+
+        /**
+         * A whole heading line ([TypstElementTypes.HEADING]) — marker AND title text. The lexer only
+         * colors the leading `=`/`==` marker; the title itself lexes as plain markup TEXT and would stay
+         * uncolored. Mirroring tinymist's `markup.heading` scope (which spans the entire heading), this
+         * paints the full node with [TypstTextAttributeKeys.HEADING] so headings read as headings. Only
+         * the prose spans are colored: an embedded `#code` / `$math$` / `*strong*` inside a heading keeps
+         * its own token/semantic colors instead of being flattened to the heading color.
+         */
+        private fun headingHighlight(heading: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
+            val out = ArrayList<Pair<TextRange, TextAttributesKey>>()
+            var child = heading.firstChildNode
+            while (child != null) {
+                if (isHeadingProse(child.elementType)) {
+                    out.add(child.textRange to TypstTextAttributeKeys.HEADING)
+                }
+                child = child.treeNext
+            }
+            return out
+        }
+
+        /** Marker + prose leaves/runs of a heading that carry the heading color (not embedded code/math). */
+        private fun isHeadingProse(type: IElementType): Boolean = when (type) {
+            TypstTokenTypes.HEADING_MARKER,
+            TypstTokenTypes.TEXT,
+            TypstTokenTypes.SHORTHAND,
+            TypstTokenTypes.SMART_QUOTE,
+            TypstTokenTypes.ESCAPE,
+            TypstElementTypes.MARKUP -> true
+
+            else -> false
+        }
 
         /**
          * The callee of a call: a bare identifier (`#table(…)`) is the call name; a field access used
@@ -93,6 +128,8 @@ class TypstAnnotator : Annotator {
                 TypstElementTypes.FIELD_ACCESS -> lastDirectIdentifier(callee)
                 else -> null
             } ?: return emptyList()
+            // A call's callee always uses the function-call key (a called builtin is still a call). The
+            // builtin-specific colors apply to builtins used as VALUES (see referenceUsageHighlight).
             return listOf(nameNode.textRange to TypstTextAttributeKeys.FUNCTION_CALL)
         }
 
@@ -190,6 +227,11 @@ class TypstAnnotator : Annotator {
          * followed by a [TypstElementTypes.PARAMS] list is a function definition; otherwise it is a value.
          */
         private fun keyForResolvedTarget(target: PsiElement): TextAttributesKey? {
+            // A builtin resolves to the generated stub: color by the builtin's kind, not the stub shape.
+            if (TypstBuiltinResolver.isStubElement(target)) {
+                return if (TypstBuiltins.isType(target.text)) TypstTextAttributeKeys.BUILTIN_TYPE
+                else TypstTextAttributeKeys.BUILTIN_FUNCTION
+            }
             val targetNode = target.node ?: return null
             return if (targetNode.treeParent?.elementType == TypstElementTypes.LET_BINDING) {
                 val isFunction = nextMeaningfulSibling(targetNode)?.elementType == TypstElementTypes.PARAMS

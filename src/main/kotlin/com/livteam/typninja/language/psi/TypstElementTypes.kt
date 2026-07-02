@@ -108,6 +108,8 @@ object TypstElementTypes {
     fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
         LET_BINDING -> TypstLetBinding(node)
         REFERENCE_EXPR -> TypstReferenceExpression(node)
+        REF -> TypstRef(node)
+        MODULE_IMPORT -> TypstModuleImport(node)
         else -> TypstPsiElement(node)
     }
 }

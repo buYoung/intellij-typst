@@ -44,7 +44,10 @@ object TypstReferenceResolver {
             findInScope(scope, name, usageNode, usageOffset)?.let { return it.psi }
             scope = scope.treeParent
         }
-        return null
+        // Nothing file-local binds the name: try a symbol brought in by a relative `#import`, then a
+        // Typst standard-library builtin. Both degrade to `null` (built-in DB miss / package import).
+        TypstModuleResolver.resolveImportedName(usage.containingFile, name)?.let { return it }
+        return TypstBuiltinResolver.resolve(usage, name)
     }
 
     /** Names introduced by [scope] itself, then the `#let` declarations directly inside it. */

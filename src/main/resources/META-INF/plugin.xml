@@ -12,8 +12,9 @@
             <li>Conservative code formatter — normalises spacing and indentation inside closed code groups (including multi-line blocks, arrays and dictionaries) while preserving markup prose. Indentation follows Settings → Code Style → Typst.</li>
             <li>Brace matching for <code>()</code>, <code>{}</code> and <code>[]</code>, and code folding for closed multi-line blocks, groups and content blocks.</li>
             <li>Line-comment toggling (<code>//</code>) via the standard Code → Comment with Line Comment action.</li>
+            <li>Go To Declaration (Cmd/Ctrl+Click): file-local variables and functions, <code>@reference</code> to its <code>&lt;label&gt;</code>, relative <code>#import</code> paths and imported names, and Typst standard-library builtins.</li>
         </ul>
-        <p>This is an MVP release. Completion, reference resolution, documentation lookup, and Typst rendering are not included.</p>
+        <p>This is an MVP release. Completion, cross-package <code>@preview</code> imports, documentation lookup, and Typst rendering are not included.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>

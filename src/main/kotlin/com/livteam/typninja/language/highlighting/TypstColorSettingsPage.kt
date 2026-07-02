@@ -42,6 +42,8 @@ class TypstColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor(MyBundle.message("color.settings.typst.variable"),             TypstTextAttributeKeys.VARIABLE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.parameter"),            TypstTextAttributeKeys.PARAMETER),
             AttributesDescriptor(MyBundle.message("color.settings.typst.named.argument"),       TypstTextAttributeKeys.NAMED_ARGUMENT),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.builtin.function"),      TypstTextAttributeKeys.BUILTIN_FUNCTION),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.builtin.type"),          TypstTextAttributeKeys.BUILTIN_TYPE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.escape"),          TypstTextAttributeKeys.ESCAPE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.heading"),         TypstTextAttributeKeys.HEADING),
             AttributesDescriptor(MyBundle.message("color.settings.typst.list.marker"),     TypstTextAttributeKeys.LIST_MARKER),
