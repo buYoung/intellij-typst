@@ -9,11 +9,11 @@ import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
+import com.livteam.typninja.language.analysis.TypstDefinitionKind
 import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.psi.TypstTokenTypes
-import com.livteam.typninja.language.references.TypstBuiltinResolver
-import com.livteam.typninja.language.references.TypstBuiltins
+import com.livteam.typninja.language.references.TypstReferenceResolver
 
 /**
  * PSI-driven highlighting annotator for Typst (FDD 9.2 contextual modifiers + semantic colors).
@@ -214,31 +214,21 @@ class TypstAnnotator : Annotator {
                 return emptyList()
             }
             val referenceExpression = reference.psi as? TypstReferenceExpression ?: return emptyList()
-            val target = referenceExpression.reference?.resolve() ?: return emptyList()
-            val key = keyForResolvedTarget(target) ?: return emptyList()
+            val result = TypstReferenceResolver.resolveResult(referenceExpression) ?: return emptyList()
+            val key = keyForDefinitionKind(result.definition.kind) ?: return emptyList()
             val nameNode = firstDirectChildOfType(reference, TypstTokenTypes.IDENTIFIER) ?: reference
             return listOf(nameNode.textRange to key)
         }
 
-        /**
-         * The semantic key for what a usage resolves to. The reference resolver only ever returns a
-         * definition NAME leaf: a `#let` bound name (its direct parent is the [TypstElementTypes.LET_BINDING]),
-         * or a parameter / for-loop binding identifier (everything else). A `#let` name that is directly
-         * followed by a [TypstElementTypes.PARAMS] list is a function definition; otherwise it is a value.
-         */
-        private fun keyForResolvedTarget(target: PsiElement): TextAttributesKey? {
-            // A builtin resolves to the generated stub: color by the builtin's kind, not the stub shape.
-            if (TypstBuiltinResolver.isStubElement(target)) {
-                return if (TypstBuiltins.isType(target.text)) TypstTextAttributeKeys.BUILTIN_TYPE
-                else TypstTextAttributeKeys.BUILTIN_FUNCTION
-            }
-            val targetNode = target.node ?: return null
-            return if (targetNode.treeParent?.elementType == TypstElementTypes.LET_BINDING) {
-                val isFunction = nextMeaningfulSibling(targetNode)?.elementType == TypstElementTypes.PARAMS
-                if (isFunction) TypstTextAttributeKeys.FUNCTION_CALL else TypstTextAttributeKeys.VARIABLE
-            } else {
-                TypstTextAttributeKeys.PARAMETER
-            }
+        private fun keyForDefinitionKind(kind: TypstDefinitionKind): TextAttributesKey? = when (kind) {
+            TypstDefinitionKind.LET_VARIABLE -> TypstTextAttributeKeys.VARIABLE
+            TypstDefinitionKind.LET_FUNCTION -> TypstTextAttributeKeys.FUNCTION_CALL
+            TypstDefinitionKind.PARAMETER,
+            TypstDefinitionKind.LOOP_BINDING -> TypstTextAttributeKeys.PARAMETER
+            TypstDefinitionKind.BUILTIN_FUNCTION -> TypstTextAttributeKeys.BUILTIN_FUNCTION
+            TypstDefinitionKind.BUILTIN_TYPE -> TypstTextAttributeKeys.BUILTIN_TYPE
+            TypstDefinitionKind.BUILTIN_MODULE -> TypstTextAttributeKeys.BUILTIN_FUNCTION
+            TypstDefinitionKind.LABEL -> null
         }
 
         // ---- ASTNode navigation helpers (direct children only; whitespace/comments skipped) ----

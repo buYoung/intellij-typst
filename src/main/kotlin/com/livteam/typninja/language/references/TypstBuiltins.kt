@@ -14,6 +14,26 @@ package com.livteam.typninja.language.references
  */
 object TypstBuiltins {
 
+    enum class Kind {
+        FUNCTION,
+        TYPE,
+        MODULE,
+    }
+
+    data class Parameter(
+        val name: String,
+        val isRequired: Boolean = false,
+    )
+
+    data class Metadata(
+        val name: String,
+        val kind: Kind,
+        val signature: String? = null,
+        val parameters: List<Parameter> = emptyList(),
+        val summary: String? = null,
+        val documentationPath: String? = null,
+    )
+
     /** Global functions (called or passed as values). */
     val FUNCTIONS: Set<String> = setOf(
         "text", "par", "parbreak", "heading", "list", "enum", "terms", "table", "grid",
@@ -40,8 +60,76 @@ object TypstBuiltins {
 
     private val ALL: Set<String> = FUNCTIONS + TYPES + MODULES
 
+    private val commonParameters: Map<String, List<Parameter>> = mapOf(
+        "text" to listOf(Parameter("body", isRequired = true)),
+        "heading" to listOf(Parameter("body", isRequired = true)),
+        "link" to listOf(Parameter("dest", isRequired = true), Parameter("body")),
+        "ref" to listOf(Parameter("target", isRequired = true)),
+        "cite" to listOf(Parameter("key", isRequired = true)),
+        "image" to listOf(Parameter("path", isRequired = true)),
+        "table" to listOf(Parameter("columns"), Parameter("rows"), Parameter("body")),
+        "grid" to listOf(Parameter("columns"), Parameter("rows"), Parameter("body")),
+        "figure" to listOf(Parameter("body", isRequired = true), Parameter("caption")),
+        "bibliography" to listOf(Parameter("path", isRequired = true)),
+        "raw" to listOf(Parameter("text", isRequired = true), Parameter("lang")),
+    )
+
+    private val commonSummaries: Map<String, String> = mapOf(
+        "text" to "Displays text with optional styling.",
+        "heading" to "Creates a document heading.",
+        "link" to "Creates a link to a URL, label, or location.",
+        "ref" to "References a label in the document.",
+        "cite" to "Cites a bibliography entry.",
+        "image" to "Embeds an image from a path.",
+        "table" to "Lays out content in a table.",
+        "grid" to "Lays out content in a grid.",
+        "figure" to "Wraps content as a numbered figure.",
+        "bibliography" to "Includes bibliography data.",
+        "raw" to "Displays raw text or code.",
+        "color" to "Represents a color value.",
+        "str" to "Represents text strings.",
+        "int" to "Represents integer numbers.",
+        "float" to "Represents floating-point numbers.",
+        "bool" to "Represents true or false values.",
+    )
+
+    private val FUNCTION_METADATA: Map<String, Metadata> = FUNCTIONS.associateWith { name ->
+        val parameters = commonParameters[name].orEmpty()
+        Metadata(
+            name = name,
+            kind = Kind.FUNCTION,
+            signature = if (parameters.isEmpty()) "$name(..)" else "$name(${parameters.joinToString { it.name }})",
+            parameters = parameters,
+            summary = commonSummaries[name],
+            documentationPath = "/docs/reference/$name/",
+        )
+    }
+
+    private val TYPE_METADATA: Map<String, Metadata> = TYPES.associateWith { name ->
+        Metadata(
+            name = name,
+            kind = Kind.TYPE,
+            summary = commonSummaries[name],
+            documentationPath = "/docs/reference/foundations/$name/",
+        )
+    }
+
+    private val MODULE_METADATA: Map<String, Metadata> = MODULES.associateWith { name ->
+        Metadata(
+            name = name,
+            kind = Kind.MODULE,
+            summary = commonSummaries[name],
+            documentationPath = "/docs/reference/$name/",
+        )
+    }
+
+    private val METADATA: Map<String, Metadata> = FUNCTION_METADATA + TYPE_METADATA + MODULE_METADATA
+
     fun isBuiltin(name: String): Boolean = name in ALL
     fun isFunction(name: String): Boolean = name in FUNCTIONS
     fun isType(name: String): Boolean = name in TYPES
     fun isModule(name: String): Boolean = name in MODULES
+    fun metadata(name: String): Metadata? = METADATA[name]
+
+    fun allMetadata(): Collection<Metadata> = METADATA.values
 }

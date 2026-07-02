@@ -13,8 +13,13 @@
             <li>Brace matching for <code>()</code>, <code>{}</code> and <code>[]</code>, and code folding for closed multi-line blocks, groups and content blocks.</li>
             <li>Line-comment toggling (<code>//</code>) via the standard Code → Comment with Line Comment action.</li>
             <li>Go To Declaration (Cmd/Ctrl+Click): file-local variables and functions, <code>@reference</code> to its <code>&lt;label&gt;</code>, relative <code>#import</code> paths and imported names, and Typst standard-library builtins.</li>
+            <li>Declaration-side Find Usages for supported file-local <code>#let</code> variables and functions.</li>
+            <li>Contextual completion for local symbols, import members, labels, named arguments, relative paths, keywords and known Typst standard-library symbols.</li>
+            <li>Weak diagnostics for high-confidence unresolved references, labels and relative imports/includes.</li>
+            <li>Quick documentation and signature help for supported user and builtin symbols.</li>
+            <li>Structure view, workspace symbol search, occurrence highlighting, URL/relative-path links, color previews, heading intentions and comment-aware Enter handling.</li>
         </ul>
-        <p>This is an MVP release. Completion, cross-package <code>@preview</code> imports, documentation lookup, and Typst rendering are not included.</p>
+        <p>This is an MVP release. Cross-package <code>@preview</code> imports, full Typst type checking, package registry lookup, Typst rendering and PDF preview are not included.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -34,6 +39,8 @@
                                         implementationClass="com.livteam.typninja.language.highlighting.TypstSyntaxHighlighterFactory"/>
         <annotator language="Typst"
                    implementationClass="com.livteam.typninja.language.highlighting.TypstAnnotator"/>
+        <annotator language="Typst"
+                   implementationClass="com.livteam.typninja.language.diagnostics.TypstDiagnosticsAnnotator"/>
         <colorSettingsPage implementation="com.livteam.typninja.language.highlighting.TypstColorSettingsPage"/>
         <lang.formatter language="Typst"
                         implementationClass="com.livteam.typninja.language.formatting.TypstFormattingModelBuilder"/>
@@ -45,6 +52,34 @@
                            implementationClass="com.livteam.typninja.language.TypstBraceMatcher"/>
         <lang.foldingBuilder language="Typst"
                              implementationClass="com.livteam.typninja.language.folding.TypstFoldingBuilder"/>
+        <lang.findUsagesProvider language="Typst"
+                                 implementationClass="com.livteam.typninja.language.references.TypstFindUsagesProvider"/>
+        <completion.contributor language="Typst"
+                                implementationClass="com.livteam.typninja.language.completion.TypstCompletionContributor"/>
+        <lang.documentationProvider language="Typst"
+                                    implementationClass="com.livteam.typninja.language.documentation.TypstDocumentationProvider"/>
+        <codeInsight.parameterInfo language="Typst"
+                                   implementationClass="com.livteam.typninja.language.documentation.TypstParameterInfoHandler"/>
+        <lang.psiStructureViewFactory language="Typst"
+                                      implementationClass="com.livteam.typninja.language.structure.TypstStructureViewFactory"/>
+        <fileBasedIndex implementation="com.livteam.typninja.language.analysis.TypstExportedSymbolIndex"/>
+        <gotoSymbolContributor implementation="com.livteam.typninja.language.structure.TypstSymbolContributor"/>
+        <highlightUsagesHandlerFactory implementationClass="com.livteam.typninja.language.editor.TypstHighlightUsagesHandlerFactory"/>
+        <extendWordSelectionHandler implementationClass="com.livteam.typninja.language.editor.TypstWordSelectionHandler"
+                                    order="first"/>
+        <colorProvider implementationClass="com.livteam.typninja.language.editor.TypstColorProvider"/>
+        <codeInsight.declarativeInlayProvider language="Typst"
+                                              providerId="typst.parameters"
+                                              bundle="messages.MyBundle"
+                                              nameKey="inlay.typst.parameters.name"
+                                              descriptionKey="inlay.typst.parameters.description"
+                                              implementationClass="com.livteam.typninja.language.editor.TypstInlayHintsProvider"/>
+        <enterHandlerDelegate implementation="com.livteam.typninja.language.actions.TypstEnterHandler"/>
+        <intentionAction>
+            <language>Typst</language>
+            <className>com.livteam.typninja.language.actions.TypstIncreaseHeadingLevelIntention</className>
+            <category>Typst</category>
+        </intentionAction>
     </extensions>
 
 </idea-plugin>

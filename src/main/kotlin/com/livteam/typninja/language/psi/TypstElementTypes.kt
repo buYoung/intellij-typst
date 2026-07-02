@@ -106,10 +106,12 @@ object TypstElementTypes {
      * carries the usage's [com.intellij.psi.PsiReference] ([TypstReferenceExpression]).
      */
     fun createElement(node: ASTNode): PsiElement = when (node.elementType) {
+        MARKUP -> TypstMarkup(node)
         LET_BINDING -> TypstLetBinding(node)
         REFERENCE_EXPR -> TypstReferenceExpression(node)
         REF -> TypstRef(node)
         MODULE_IMPORT -> TypstModuleImport(node)
+        STRING_LITERAL -> TypstStringLiteral(node)
         else -> TypstPsiElement(node)
     }
 }
