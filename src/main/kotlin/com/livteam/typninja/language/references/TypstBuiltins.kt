@@ -18,6 +18,7 @@ object TypstBuiltins {
         FUNCTION,
         TYPE,
         MODULE,
+        VALUE,
     }
 
     data class Parameter(
@@ -45,6 +46,7 @@ object TypstBuiltins {
         "sub", "super", "smallcaps", "upper", "lower", "smartquote", "linebreak", "lorem",
         "counter", "state", "query", "locate", "here", "metadata", "assert", "eval", "panic",
         "repr", "target", "plugin", "read", "csv", "json", "toml", "yaml", "xml", "cbor",
+        "rgb", "luma", "cmyk", "oklab", "oklch", "linear-rgb", "hsv",
     )
 
     /** Built-in types (usable as values, e.g. `type(x) == int`). */
@@ -58,10 +60,18 @@ object TypstBuiltins {
     /** Top-level modules that group functions/values (`calc.abs`, `sys.version`, `sym.arrow`, …). */
     val MODULES: Set<String> = setOf("calc", "sys", "std", "sym", "emoji")
 
-    private val ALL: Set<String> = FUNCTIONS + TYPES + MODULES
+    /** Global values that are available without imports. */
+    val VALUES: Set<String> = setOf(
+        "black", "gray", "silver", "white",
+        "navy", "blue", "aqua", "teal",
+        "eastern", "purple", "fuchsia", "maroon",
+        "red", "orange", "yellow", "olive", "green", "lime",
+    )
+
+    private val ALL: Set<String> = FUNCTIONS + TYPES + MODULES + VALUES
 
     private val commonParameters: Map<String, List<Parameter>> = mapOf(
-        "text" to listOf(Parameter("body", isRequired = true)),
+        "text" to listOf(Parameter("fill"), Parameter("size"), Parameter("weight"), Parameter("body", isRequired = true)),
         "heading" to listOf(Parameter("body", isRequired = true)),
         "link" to listOf(Parameter("dest", isRequired = true), Parameter("body")),
         "ref" to listOf(Parameter("target", isRequired = true)),
@@ -123,12 +133,22 @@ object TypstBuiltins {
         )
     }
 
-    private val METADATA: Map<String, Metadata> = FUNCTION_METADATA + TYPE_METADATA + MODULE_METADATA
+    private val VALUE_METADATA: Map<String, Metadata> = VALUES.associateWith { name ->
+        Metadata(
+            name = name,
+            kind = Kind.VALUE,
+            summary = "Built-in color value.",
+            documentationPath = "/docs/reference/visualize/color/",
+        )
+    }
+
+    private val METADATA: Map<String, Metadata> = FUNCTION_METADATA + TYPE_METADATA + MODULE_METADATA + VALUE_METADATA
 
     fun isBuiltin(name: String): Boolean = name in ALL
     fun isFunction(name: String): Boolean = name in FUNCTIONS
     fun isType(name: String): Boolean = name in TYPES
     fun isModule(name: String): Boolean = name in MODULES
+    fun isValue(name: String): Boolean = name in VALUES
     fun metadata(name: String): Metadata? = METADATA[name]
 
     fun allMetadata(): Collection<Metadata> = METADATA.values

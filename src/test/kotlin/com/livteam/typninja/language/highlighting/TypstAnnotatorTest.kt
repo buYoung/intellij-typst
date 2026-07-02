@@ -1,6 +1,7 @@
 package com.livteam.typninja.language.highlighting
 
 import com.intellij.lang.ASTNode
+import com.intellij.openapi.editor.DefaultLanguageHighlighterColors
 import com.intellij.psi.PsiFile
 import com.intellij.psi.tree.IElementType
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
@@ -82,6 +83,14 @@ class TypstAnnotatorTest : BasePlatformTestCase() {
         val (range, key) = highlights.single()
         assertEquals("v", rangeText(file, range))
         assertSame("a plain let name uses the variable-definition key", TypstTextAttributeKeys.VARIABLE_DEFINITION, key)
+    }
+
+    fun testVariableDefinitionKeyUsesThemeFallbackOnly() {
+        assertSame(
+            "variable definitions must inherit the current scheme's identifier color",
+            DefaultLanguageHighlighterColors.IDENTIFIER,
+            TypstTextAttributeKeys.VARIABLE_DEFINITION.fallbackAttributeKey,
+        )
     }
 
     fun testLetFunctionGetsDeclarationKeyAndParamsGetParameterKey() {

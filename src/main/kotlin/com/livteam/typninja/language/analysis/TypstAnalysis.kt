@@ -26,6 +26,7 @@ enum class TypstDefinitionKind {
     BUILTIN_FUNCTION,
     BUILTIN_TYPE,
     BUILTIN_MODULE,
+    BUILTIN_VALUE,
 }
 
 data class TypstDefinition(
@@ -135,7 +136,17 @@ object TypstAnalysis {
         val snapshot = snapshot(usageFile) ?: return null
         for (locatedImport in snapshot.imports) {
             val summary = locatedImport.summary
-            val moduleName = summary.items.firstOrNull { it.localName == name }?.moduleName
+            val importItem = summary.items.firstOrNull { it.localName == name }
+            if (summary.isPackageImport && importItem != null) {
+                val definition = TypstDefinition(
+                    name = importItem.localName,
+                    kind = TypstDefinitionKind.LET_VARIABLE,
+                    nameElement = importItem.nameNode.psi,
+                    declarationElement = locatedImport.node.psi,
+                )
+                return TypstResolveResult(definition)
+            }
+            val moduleName = importItem?.moduleName
                 ?: (if (summary.isGlob) name else null)
                 ?: continue
             val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString) ?: continue
@@ -150,6 +161,7 @@ object TypstAnalysis {
             TypstBuiltins.isType(name) -> TypstDefinitionKind.BUILTIN_TYPE
             TypstBuiltins.isModule(name) -> TypstDefinitionKind.BUILTIN_MODULE
             TypstBuiltins.isFunction(name) -> TypstDefinitionKind.BUILTIN_FUNCTION
+            TypstBuiltins.isValue(name) -> TypstDefinitionKind.BUILTIN_VALUE
             else -> return null
         }
         val target = TypstBuiltinResolver.resolve(anchor, name) ?: return null

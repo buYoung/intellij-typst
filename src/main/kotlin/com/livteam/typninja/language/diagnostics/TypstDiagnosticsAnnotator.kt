@@ -10,6 +10,8 @@ import com.livteam.typninja.language.analysis.TypstModuleFiles
 import com.livteam.typninja.language.psi.TypstModuleImport
 import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.psi.TypstReferenceExpression
+import com.livteam.typninja.language.references.TypstBuiltins
+import com.livteam.typninja.language.psi.TypstTokenTypes as T
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 
 class TypstDiagnosticsAnnotator : Annotator {
@@ -24,6 +26,13 @@ class TypstDiagnosticsAnnotator : Annotator {
     }
 
     private fun annotateReference(element: TypstReferenceExpression, holder: AnnotationHolder) {
+        if (isStandaloneBareBox(element)) {
+            holder.newAnnotation(HighlightSeverity.ERROR, "Standalone `box` does not produce content; call it with parentheses or a content block")
+                .range(element.textRange)
+                .highlightType(ProblemHighlightType.GENERIC_ERROR)
+                .create()
+            return
+        }
         val name = element.referenceName
         if (name.isEmpty() || TypstAnalysis.resolve(element) != null) return
         holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "Unresolved Typst reference")
@@ -45,9 +54,6 @@ class TypstDiagnosticsAnnotator : Annotator {
         val path = summary.pathString ?: return
         val pathElement = element.node.findChildByType(E.STRING_LITERAL)?.psi ?: element
         if (summary.isPackageImport) {
-            holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "Typst package imports are not supported yet")
-                .range(pathElement.textRange)
-                .create()
             return
         }
         if (TypstModuleFiles.resolveModuleFile(element.containingFile, path) == null) {
@@ -75,4 +81,34 @@ class TypstDiagnosticsAnnotator : Annotator {
                 .create()
         }
     }
+
+    private fun isStandaloneBareBox(element: TypstReferenceExpression): Boolean {
+        if (element.referenceName != "box" || !TypstBuiltins.isFunction("box")) return false
+        val referenceNode = element.node
+        val codeExpression = referenceNode.treeParent
+        if (codeExpression?.elementType == E.CODE_EXPRESSION) {
+            if (onlyMeaningfulChild(codeExpression) !== referenceNode) return false
+            return codeExpression.treeParent?.elementType == E.CODE_BLOCK
+        }
+        return codeExpression?.elementType == E.CODE_BLOCK
+    }
+
+    private fun onlyMeaningfulChild(node: com.intellij.lang.ASTNode): com.intellij.lang.ASTNode? {
+        var result: com.intellij.lang.ASTNode? = null
+        var child = node.firstChildNode
+        while (child != null) {
+            if (!isSkippable(child.elementType)) {
+                if (result != null) return null
+                result = child
+            }
+            child = child.treeNext
+        }
+        return result
+    }
+
+    private fun isSkippable(type: com.intellij.psi.tree.IElementType): Boolean =
+        type == com.intellij.psi.TokenType.WHITE_SPACE ||
+            type == T.LINE_COMMENT ||
+            type == T.BLOCK_COMMENT ||
+            type == T.PARBREAK
 }

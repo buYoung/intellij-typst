@@ -60,6 +60,18 @@ class TypstReferenceResolutionTest : BasePlatformTestCase() {
         assertResolvesTo("#let f(x) = <caret>x\n", "x", 7)
     }
 
+    fun testResolveHyphenatedFunctionParametersInBlockBody() {
+        val text = """
+            #let format-value(data, level) = {
+              let prefix = if "prefix" in data { data.prefix } else { "" }
+              if level == "normal" { data.value } else { level }
+            }
+        """.trimIndent()
+
+        assertResolvesTo(text.replace("data {", "da<caret>ta {"), "data", text.indexOf("data"))
+        assertResolvesTo(text.replace("level ==", "lev<caret>el =="), "level", text.indexOf("level"))
+    }
+
     fun testResolveClosureParameterInBody() {
         // `#let add = (x, y) => x + y` — param `x` at offset 12 (the `(` is at 11).
         assertResolvesTo("#let add = (x, y) => <caret>x + y\n", "x", 12)
@@ -68,6 +80,18 @@ class TypstReferenceResolutionTest : BasePlatformTestCase() {
     fun testResolveBareIdentifierClosureParameter() {
         // `#show heading: it => it` — the leading `it` (offset 15) is the parameter.
         assertResolvesTo("#show heading: it => i<caret>t\n", "it", 15)
+    }
+
+    fun testShowRuleClosureAndBlockResolveParametersAndLocals() {
+        val text = """
+            #show heading: item => {
+              let local = item
+              local
+            }
+        """.trimIndent()
+
+        assertResolvesTo(text.replace("item\n", "it<caret>em\n"), "item", text.indexOf("item"))
+        assertResolvesTo(text.replace("local\n", "lo<caret>cal\n"), "local", text.indexOf("local"))
     }
 
     // ---- #for loop binding ----
@@ -128,6 +152,32 @@ class TypstReferenceResolutionTest : BasePlatformTestCase() {
 
     fun testNamedArgumentKeyCarriesNoReference() {
         assertFalse("a named-argument key must not be a reference", hasReferenceAtCaret("#table(colu<caret>mns: 2)\n"))
+    }
+
+    fun testImportClauseSyntaxDoesNotCreateGeneralReferences() {
+        myFixture.addFileToProject("base.typ", "#let exported = 1\n#let aliased = 2\n")
+        val mainFile = myFixture.addFileToProject(
+            "main.typ",
+            """
+                #import "base.typ": exported, aliased as local, *
+                #let exported = 3
+                #local
+            """.trimIndent(),
+        )
+        myFixture.configureFromExistingVirtualFile(mainFile.virtualFile)
+        val text = myFixture.editor.document.text
+
+        val importPathOffset = text.indexOf("base.typ")
+        val importItemOffset = text.indexOf("exported")
+        val aliasOffset = text.indexOf("local")
+        val globOffset = text.indexOf("*")
+        val localUsageOffset = text.lastIndexOf("local")
+
+        assertNotNull("import path must keep its path reference", myFixture.file.findReferenceAt(importPathOffset))
+        assertNotNull("import module-side item must keep its import-member reference", myFixture.file.findReferenceAt(importItemOffset))
+        assertNull("import alias is a local declaration, not a general reference", myFixture.file.findReferenceAt(aliasOffset))
+        assertNull("import glob star is syntax, not a general reference", myFixture.file.findReferenceAt(globOffset))
+        assertEquals("aliased", myFixture.file.findReferenceAt(localUsageOffset)!!.resolve()!!.text)
     }
 
     // ---- PSI wiring sanity ----

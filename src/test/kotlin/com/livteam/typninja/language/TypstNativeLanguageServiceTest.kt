@@ -1,5 +1,6 @@
 package com.livteam.typninja.language
 
+import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.livteam.typninja.language.editor.TypstWordSelectionHandler
@@ -37,6 +38,21 @@ class TypstNativeLanguageServiceTest : BasePlatformTestCase() {
             "exported-value",
             "#let ".length,
         )
+    }
+
+    fun testDeclarationSideGotoDeclarationReturnsSingleUsageTarget() {
+        myFixture.configureByText("test.typ", "#let va<caret>lue = 1\n#value\n")
+
+        val targets = GotoDeclarationAction.findAllTargetElements(
+            project,
+            myFixture.editor,
+            myFixture.caretOffset,
+        )
+
+        assertNotNull("declaration-side goto must produce usage targets", targets)
+        assertEquals("single usage should be a single direct target", 1, targets!!.size)
+        assertEquals("value", targets.single().text)
+        assertEquals(myFixture.editor.document.text.lastIndexOf("value"), targets.single().textRange.startOffset)
     }
 
     fun testImportedSymbolUsageResolvesToExportedDefinition() {
@@ -260,11 +276,73 @@ class TypstNativeLanguageServiceTest : BasePlatformTestCase() {
         myFixture.checkHighlighting(false, false, true)
     }
 
+    fun testPackageImportDoesNotWarnAsUnsupportedOrUnresolved() {
+        myFixture.configureByText(
+            "test.typ",
+            """
+                #import "@preview/cetz:0.3.4": canvas
+                #canvas
+            """.trimIndent(),
+        )
+
+        myFixture.checkHighlighting(false, false, true)
+    }
+
+    fun testPackageImportUsageResolvesToImportItemWithoutRegistryLookup() {
+        myFixture.configureByText(
+            "test.typ",
+            """
+                #import "@preview/cetz:0.3.4": canvas
+                #can<caret>vas
+            """.trimIndent(),
+        )
+
+        val target = referenceAtCaret()?.resolve()
+
+        assertNotNull("package import usage must resolve to the explicit import item", target)
+        assertEquals("canvas", target!!.text)
+        assertEquals(myFixture.editor.document.text.indexOf("canvas"), target.textRange.startOffset)
+    }
+
+    fun testBuiltinColorInFunctionBodyDoesNotWarnAsUnresolved() {
+        myFixture.configureByText(
+            "test.typ",
+            """
+                #let get-level-color(level) = {
+                  if level == "danger" { red }
+                  else { black }
+                }
+                #luma(95%)
+            """.trimIndent(),
+        )
+
+        myFixture.checkHighlighting(false, false, true)
+    }
+
     fun testDiagnosticsWarnForUnresolvedInclude() {
         myFixture.configureByText(
             "test.typ",
             """#include <weak_warning descr="Unresolved Typst include">"missing.typ"</weak_warning>""",
         )
+
+        myFixture.checkHighlighting(false, false, true)
+    }
+
+    fun testDiagnosticsErrorForStandaloneBoxExpressionInCodeBlock() {
+        myFixture.configureByText(
+            "test.typ",
+            """
+                #{
+                  <error descr="Standalone `box` does not produce content; call it with parentheses or a content block">box</error>
+                }
+            """.trimIndent(),
+        )
+
+        myFixture.checkHighlighting(false, false, true)
+    }
+
+    fun testDiagnosticsDoNotErrorForBoxUsedAsFunctionValue() {
+        myFixture.configureByText("test.typ", "#let make-box = box\n#make-box\n")
 
         myFixture.checkHighlighting(false, false, true)
     }

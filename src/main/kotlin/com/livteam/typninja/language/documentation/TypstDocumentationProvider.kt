@@ -77,5 +77,6 @@ class TypstDocumentationProvider : AbstractDocumentationProvider() {
         TypstDefinitionKind.BUILTIN_FUNCTION -> "builtin function"
         TypstDefinitionKind.BUILTIN_TYPE -> "builtin type"
         TypstDefinitionKind.BUILTIN_MODULE -> "builtin module"
+        TypstDefinitionKind.BUILTIN_VALUE -> "builtin value"
     }
 }

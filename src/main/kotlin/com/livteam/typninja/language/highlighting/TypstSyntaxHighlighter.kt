@@ -111,7 +111,7 @@ object TypstTextAttributeKeys {
     /** Name bound by a plain `#let v = …` (a value definition). */
     @JvmField
     val VARIABLE_DEFINITION: TextAttributesKey = createTextAttributesKey(
-        "TYPST_VARIABLE_DEFINITION", DefaultLanguageHighlighterColors.LOCAL_VARIABLE
+        "TYPST_VARIABLE_DEFINITION", DefaultLanguageHighlighterColors.IDENTIFIER
     )
 
     /**

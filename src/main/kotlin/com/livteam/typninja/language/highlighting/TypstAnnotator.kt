@@ -228,6 +228,7 @@ class TypstAnnotator : Annotator {
             TypstDefinitionKind.BUILTIN_FUNCTION -> TypstTextAttributeKeys.BUILTIN_FUNCTION
             TypstDefinitionKind.BUILTIN_TYPE -> TypstTextAttributeKeys.BUILTIN_TYPE
             TypstDefinitionKind.BUILTIN_MODULE -> TypstTextAttributeKeys.BUILTIN_FUNCTION
+            TypstDefinitionKind.BUILTIN_VALUE -> TypstTextAttributeKeys.VARIABLE
             TypstDefinitionKind.LABEL -> null
         }
 

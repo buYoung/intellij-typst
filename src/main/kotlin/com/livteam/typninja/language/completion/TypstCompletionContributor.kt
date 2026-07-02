@@ -324,6 +324,7 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         TypstDefinitionKind.BUILTIN_FUNCTION -> "builtin function"
         TypstDefinitionKind.BUILTIN_TYPE -> "builtin type"
         TypstDefinitionKind.BUILTIN_MODULE -> "builtin module"
+        TypstDefinitionKind.BUILTIN_VALUE -> "builtin value"
     }
 
     private val pathFunctions = setOf("image", "bibliography", "read", "csv", "json", "toml", "yaml", "xml", "cbor")

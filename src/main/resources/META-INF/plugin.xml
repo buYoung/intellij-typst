@@ -54,6 +54,7 @@
                              implementationClass="com.livteam.typninja.language.folding.TypstFoldingBuilder"/>
         <lang.findUsagesProvider language="Typst"
                                  implementationClass="com.livteam.typninja.language.references.TypstFindUsagesProvider"/>
+        <gotoDeclarationHandler implementation="com.livteam.typninja.language.references.TypstDeclarationUsageGotoHandler"/>
         <completion.contributor language="Typst"
                                 implementationClass="com.livteam.typninja.language.completion.TypstCompletionContributor"/>
         <lang.documentationProvider language="Typst"
