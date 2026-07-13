@@ -8,6 +8,7 @@ import com.intellij.codeInsight.completion.CompletionType
 import com.intellij.codeInsight.lookup.LookupElementBuilder
 import com.intellij.lang.ASTNode
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.project.DumbAware
 import com.intellij.patterns.PlatformPatterns
 import com.intellij.psi.PsiManager
 import com.intellij.psi.PsiElement
@@ -18,10 +19,11 @@ import com.livteam.typninja.language.analysis.TypstDefinitionKind
 import com.livteam.typninja.language.analysis.TypstModuleFiles
 import com.livteam.typninja.language.psi.TypstTokenTypes
 import com.livteam.typninja.language.references.TypstBuiltins
+import com.livteam.typninja.language.references.TypstPackageResolver
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 
-class TypstCompletionContributor : CompletionContributor() {
+class TypstCompletionContributor : CompletionContributor(), DumbAware {
 
     init {
         extend(
@@ -47,6 +49,15 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         val position = parameters.position
         val snapshot = TypstAnalysis.snapshot(parameters.originalFile)
         val seenNames = HashSet<String>()
+
+        packageSpecificationPrefix(parameters)?.let { prefix ->
+            for (specification in TypstPackageResolver.installedSpecifications(position.project)) {
+                result.withPrefixMatcher(prefix).addElement(
+                    LookupElementBuilder.create(specification).withTypeText("installed package", true),
+                )
+            }
+            return
+        }
 
         pathCompletionPrefix(parameters, position)?.let { prefix ->
             addRelativePathCompletions(parameters, result.withPrefixMatcher(prefix))
@@ -116,8 +127,6 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         val snapshot = TypstAnalysis.snapshot(parameters.originalFile) ?: return
         for (locatedImport in snapshot.imports) {
             val summary = locatedImport.summary
-            if (summary.isPackageImport) continue
-
             for (item in summary.items) {
                 if (seenNames.add(item.localName)) {
                     result.addElement(LookupElementBuilder.create(item.localName).withTypeText("import", true))
@@ -171,7 +180,6 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
     ) {
         val moduleImport = parentOfType(importItems, E.MODULE_IMPORT) ?: return
         val summary = TypstAnalysis.parseImport(moduleImport)
-        if (summary.isPackageImport) return
         addImportMemberCompletions(parameters, summary.pathString, result)
     }
 
@@ -267,6 +275,12 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         return cleanupCompletionDummy(match.groupValues.last())
     }
 
+    private fun packageSpecificationPrefix(parameters: CompletionParameters): String? {
+        val beforeCaret = currentLineBeforeCaret(parameters)
+        val match = Regex("""#\s*import\s+\"(@[^\"\n]*)$""").find(beforeCaret) ?: return null
+        return cleanupCompletionDummy(match.groupValues[1])
+    }
+
     private fun currentLineBeforeCaret(parameters: CompletionParameters): String {
         val text = parameters.editor.document.charsSequence
         val offset = parameters.offset.coerceIn(0, text.length)
@@ -321,6 +335,8 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         TypstDefinitionKind.PARAMETER -> "parameter"
         TypstDefinitionKind.LOOP_BINDING -> "loop binding"
         TypstDefinitionKind.LABEL -> "label"
+        TypstDefinitionKind.IMPORTED_SYMBOL -> "import"
+        TypstDefinitionKind.MODULE_ALIAS -> "module"
         TypstDefinitionKind.BUILTIN_FUNCTION -> "builtin function"
         TypstDefinitionKind.BUILTIN_TYPE -> "builtin type"
         TypstDefinitionKind.BUILTIN_MODULE -> "builtin module"

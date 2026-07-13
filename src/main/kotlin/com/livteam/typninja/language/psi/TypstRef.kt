@@ -2,6 +2,7 @@ package com.livteam.typninja.language.psi
 
 import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
 import com.livteam.typninja.language.references.TypstLabelReference
 import com.livteam.typninja.language.references.TypstLabelResolver
@@ -29,4 +30,6 @@ class TypstRef(node: ASTNode) : TypstPsiElement(node) {
         getReference()?.let { arrayOf(it) } ?: PsiReference.EMPTY_ARRAY
 
     private fun markerNode(): ASTNode? = node.findChildByType(TypstTokenTypes.REF_MARKER)
+
+    fun renamed(name: String): PsiElement = replace(TypstElementFactory.createLabelReference(project, name))
 }

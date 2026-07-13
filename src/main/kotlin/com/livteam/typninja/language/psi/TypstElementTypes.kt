@@ -53,6 +53,7 @@ object TypstElementTypes {
     @JvmField val STRONG: IElementType = TypstElementType("STRONG")
     @JvmField val EMPH: IElementType = TypstElementType("EMPH")
     @JvmField val REF: IElementType = TypstElementType("REF")
+    @JvmField val LABEL: IElementType = TypstElementType("LABEL")
 
     // ---- code statements ----
     @JvmField val LET_BINDING: IElementType = TypstElementType("LET_BINDING")
@@ -64,6 +65,9 @@ object TypstElementTypes {
     @JvmField val FOR_LOOP: IElementType = TypstElementType("FOR_LOOP")
     @JvmField val MODULE_IMPORT: IElementType = TypstElementType("MODULE_IMPORT")
     @JvmField val IMPORT_ITEMS: IElementType = TypstElementType("IMPORT_ITEMS")
+    @JvmField val IMPORT_ITEM: IElementType = TypstElementType("IMPORT_ITEM")
+    /** Explicit `*` in an import item list. It is not an import item or a declaration. */
+    @JvmField val IMPORT_GLOB: IElementType = TypstElementType("IMPORT_GLOB")
     @JvmField val MODULE_INCLUDE: IElementType = TypstElementType("MODULE_INCLUDE")
     @JvmField val LOOP_BREAK: IElementType = TypstElementType("LOOP_BREAK")
     @JvmField val LOOP_CONTINUE: IElementType = TypstElementType("LOOP_CONTINUE")
@@ -110,7 +114,10 @@ object TypstElementTypes {
         LET_BINDING -> TypstLetBinding(node)
         REFERENCE_EXPR -> TypstReferenceExpression(node)
         REF -> TypstRef(node)
+        LABEL -> TypstLabelDefinition(node)
         MODULE_IMPORT -> TypstModuleImport(node)
+        IMPORT_ITEM -> TypstImportItem(node)
+        FIELD_ACCESS -> TypstFieldAccess(node)
         STRING_LITERAL -> TypstStringLiteral(node)
         else -> TypstPsiElement(node)
     }

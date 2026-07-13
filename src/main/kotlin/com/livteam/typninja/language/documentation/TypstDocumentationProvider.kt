@@ -74,6 +74,8 @@ class TypstDocumentationProvider : AbstractDocumentationProvider() {
         TypstDefinitionKind.PARAMETER -> "parameter"
         TypstDefinitionKind.LOOP_BINDING -> "loop binding"
         TypstDefinitionKind.LABEL -> "label"
+        TypstDefinitionKind.IMPORTED_SYMBOL -> "imported symbol"
+        TypstDefinitionKind.MODULE_ALIAS -> "module"
         TypstDefinitionKind.BUILTIN_FUNCTION -> "builtin function"
         TypstDefinitionKind.BUILTIN_TYPE -> "builtin type"
         TypstDefinitionKind.BUILTIN_MODULE -> "builtin module"

@@ -2,6 +2,7 @@ package com.livteam.typninja.language.psi
 
 import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.TextRange
+import com.intellij.openapi.paths.WebReference
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiManager
@@ -14,13 +15,16 @@ class TypstStringLiteral(node: ASTNode) : TypstPsiElement(node) {
 
     override fun getReferences(): Array<PsiReference> {
         val path = unquote(text)
-        if (path.isEmpty() || path.startsWith("@") || path.startsWith("http://") || path.startsWith("https://")) {
+        if (path.isEmpty() || path.startsWith("@")) {
             return PsiReference.EMPTY_ARRAY
+        }
+        val range = if (text.length >= 2) TextRange(1, text.length - 1) else TextRange(0, text.length)
+        if ((path.startsWith("http://") || path.startsWith("https://")) && isLinkDestination()) {
+            return arrayOf(WebReference(this, range, path))
         }
         val isModulePath = ancestor(TypstElementTypes.MODULE_IMPORT) != null ||
             ancestor(TypstElementTypes.MODULE_INCLUDE) != null
         if (!isModulePath && pathFunctionName() == null) return PsiReference.EMPTY_ARRAY
-        val range = if (text.length >= 2) TextRange(1, text.length - 1) else TextRange(0, text.length)
         return arrayOf(TypstStringPathReference(this, range, path, isModulePath))
     }
 
@@ -32,6 +36,8 @@ class TypstStringLiteral(node: ASTNode) : TypstPsiElement(node) {
         val name = firstIdentifierText(call) ?: return null
         return name.takeIf { it in pathFunctions }
     }
+
+    private fun isLinkDestination(): Boolean = pathFunctionName() == "link"
 
     private fun ancestor(type: IElementType): ASTNode? {
         var current: ASTNode? = node
@@ -55,7 +61,7 @@ class TypstStringLiteral(node: ASTNode) : TypstPsiElement(node) {
     private fun unquote(text: String): String =
         if (text.length >= 2 && text.first() == '"' && text.last() == '"') text.substring(1, text.length - 1) else text
 
-    private val pathFunctions = setOf("image", "bibliography", "read", "csv", "json", "toml", "yaml", "xml", "cbor")
+    private val pathFunctions = setOf("image", "bibliography", "read", "csv", "json", "toml", "yaml", "xml", "cbor", "link")
 }
 
 private class TypstStringPathReference(

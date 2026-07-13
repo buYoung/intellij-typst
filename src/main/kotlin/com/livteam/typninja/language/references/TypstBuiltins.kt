@@ -142,6 +142,18 @@ object TypstBuiltins {
         )
     }
 
+    /** Conservative 0.15 module members used by all native code-insight consumers. */
+    private val MODULE_MEMBERS: Map<String, List<Metadata>> = mapOf(
+        "calc" to listOf(
+            Metadata("abs", Kind.FUNCTION, "abs(value)", listOf(Parameter("value", true)), "Returns the absolute value."),
+            Metadata("ceil", Kind.FUNCTION, "ceil(value)", listOf(Parameter("value", true)), "Rounds up."),
+            Metadata("floor", Kind.FUNCTION, "floor(value)", listOf(Parameter("value", true)), "Rounds down."),
+            Metadata("min", Kind.FUNCTION, "min(..values)", listOf(Parameter("values", true)), "Returns the smallest value."),
+            Metadata("max", Kind.FUNCTION, "max(..values)", listOf(Parameter("values", true)), "Returns the largest value."),
+            Metadata("pow", Kind.FUNCTION, "pow(base, exponent)", listOf(Parameter("base", true), Parameter("exponent", true)), "Raises a value to a power."),
+        ),
+    )
+
     private val METADATA: Map<String, Metadata> = FUNCTION_METADATA + TYPE_METADATA + MODULE_METADATA + VALUE_METADATA
 
     fun isBuiltin(name: String): Boolean = name in ALL
@@ -150,6 +162,13 @@ object TypstBuiltins {
     fun isModule(name: String): Boolean = name in MODULES
     fun isValue(name: String): Boolean = name in VALUES
     fun metadata(name: String): Metadata? = METADATA[name]
+
+    fun moduleMemberMetadata(moduleName: String, memberName: String): Metadata? =
+        MODULE_MEMBERS[moduleName]?.firstOrNull { it.name == memberName }
+
+    fun moduleMembers(moduleName: String): List<Metadata> = MODULE_MEMBERS[moduleName].orEmpty()
+
+    fun allStubNames(): Set<String> = ALL + MODULE_MEMBERS.values.flatten().map(Metadata::name)
 
     fun allMetadata(): Collection<Metadata> = METADATA.values
 }

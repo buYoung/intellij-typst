@@ -1,8 +1,12 @@
 package com.livteam.typninja.language.editor
 
 import com.intellij.openapi.editor.ElementColorProvider
+import com.intellij.openapi.command.WriteCommandAction
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.util.PsiTreeUtil
+import com.livteam.typninja.language.psi.TypstElementFactory
+import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import java.awt.Color
 
@@ -13,13 +17,25 @@ class TypstColorProvider : ElementColorProvider {
         parseHexColor(text)?.let { return it }
         val reference = PsiTreeUtil.getParentOfType(element, TypstReferenceExpression::class.java, false)
         if (reference?.referenceName != "rgb") return null
-        val call = reference.parent
-        val argsText = call?.text ?: return null
+        val argsText = rgbCall(reference)?.text ?: return null
         return parseRgbCall(argsText)
     }
 
     override fun setColorTo(element: PsiElement, color: Color) {
-        // Color editing is intentionally omitted until PSI replacement for all supported syntaxes is safe.
+        if (parseHexColor(element.text.trim()) != null) {
+            val document = PsiDocumentManager.getInstance(element.project).getDocument(element.containingFile) ?: return
+            val replacement = "#%02X%02X%02X".format(color.red, color.green, color.blue)
+            WriteCommandAction.runWriteCommandAction(element.project) {
+                document.replaceString(element.textRange.startOffset, element.textRange.endOffset, replacement)
+                PsiDocumentManager.getInstance(element.project).commitDocument(document)
+            }
+            return
+        }
+        val call = rgbCall(element) ?: return
+        if (parseRgbCall(call.text) == null) return
+        WriteCommandAction.runWriteCommandAction(element.project) {
+            call.replace(TypstElementFactory.createRgbCall(element.project, color.red, color.green, color.blue))
+        }
     }
 
     private fun parseHexColor(text: String): Color? {
@@ -35,10 +51,16 @@ class TypstColorProvider : ElementColorProvider {
         if (open < 0 || close <= open) return null
         val channels = text.substring(open + 1, close)
             .split(',')
-            .map { it.trim().removeSuffix("%") }
-        if (channels.size < 3) return null
-        val values = channels.take(3).mapNotNull { it.toIntOrNull() }
+            .map { it.trim() }
+        if (channels.size != 3 || channels.any { it.endsWith('%') }) return null
+        val values = channels.mapNotNull { it.toIntOrNull() }
         if (values.size != 3 || values.any { it !in 0..255 }) return null
         return Color(values[0], values[1], values[2])
+    }
+
+    private fun rgbCall(element: PsiElement): PsiElement? {
+        val reference = PsiTreeUtil.getParentOfType(element, TypstReferenceExpression::class.java, false) ?: return null
+        val call = reference.parent
+        return call?.takeIf { it.node.elementType == TypstElementTypes.FUNC_CALL }
     }
 }

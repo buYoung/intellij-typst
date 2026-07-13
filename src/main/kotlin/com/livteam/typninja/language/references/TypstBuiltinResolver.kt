@@ -1,5 +1,8 @@
 package com.livteam.typninja.language.references
 
+import com.intellij.openapi.Disposable
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.util.Key
 import com.intellij.psi.PsiElement
@@ -20,12 +23,14 @@ import com.livteam.typninja.language.psi.TypstReferenceExpression
  */
 object TypstBuiltinResolver {
 
-    private val STUB_KEY: Key<PsiFile> = Key.create("typst.builtin.stub.file")
-
     /** Resolve [name] to its stub `#let` declaration, or `null` when it is not a known builtin. */
     fun resolve(usage: TypstReferenceExpression, name: String): PsiElement? {
-        if (!TypstBuiltins.isBuiltin(name)) return null
-        val stub = stubFile(usage.project) as? TypstFile ?: return null
+        return resolve(usage.project, name)
+    }
+
+    fun resolve(project: Project, name: String): PsiElement? {
+        if (!TypstBuiltins.isBuiltin(name) && TypstBuiltins.allStubNames().contains(name).not()) return null
+        val stub = TypstBuiltinStubService.getInstance(project).stubFile() as? TypstFile ?: return null
         return TypstModuleResolver.findExport(stub, name)
     }
 
@@ -35,29 +40,37 @@ object TypstBuiltinResolver {
         return file.getUserData(STUB_MARKER) == true
     }
 
-    private val STUB_MARKER: Key<Boolean> = Key.create("typst.builtin.stub.marker")
+    internal val STUB_MARKER: Key<Boolean> = Key.create("typst.builtin.stub.marker")
 
-    private fun stubFile(project: Project): PsiFile? {
-        project.getUserData(STUB_KEY)?.let { return it }
-        return synchronized(project) {
-            project.getUserData(STUB_KEY) ?: run {
-            val file = PsiFileFactory.getInstance(project)
-                .createFileFromText("typst-std.typ", TypstLanguage, buildStubText())
-            file.putUserData(STUB_MARKER, true)
-                project.putUserData(STUB_KEY, file)
-                file
-            }
-        }
-    }
-
-    private fun buildStubText(): String = buildString {
+    internal fun buildStubText(): String = buildString {
         appendLine("// Typst standard library — generated navigation stubs.")
         appendLine("// Placeholders so Go To Declaration on a builtin lands here; the real")
         appendLine("// implementations live in the Typst compiler. Docs: https://typst.app/docs/reference/")
         appendLine()
-        for (name in TypstBuiltins.FUNCTIONS) appendLine("#let $name = none")
-        for (name in TypstBuiltins.TYPES) appendLine("#let $name = none")
-        for (name in TypstBuiltins.MODULES) appendLine("#let $name = none")
-        for (name in TypstBuiltins.VALUES) appendLine("#let $name = none")
+        for (name in TypstBuiltins.allStubNames()) appendLine("#let $name = none")
+    }
+}
+
+/** Owns synthetic builtin PSI so project user data cannot retain plugin classes after unload. */
+@Service(Service.Level.PROJECT)
+class TypstBuiltinStubService(private val project: Project) : Disposable {
+    @Volatile
+    private var cachedStub: PsiFile? = null
+
+    fun stubFile(): PsiFile = cachedStub ?: synchronized(this) {
+        cachedStub ?: PsiFileFactory.getInstance(project)
+            .createFileFromText("typst-std.typ", TypstLanguage, TypstBuiltinResolver.buildStubText())
+            .also { file ->
+                file.putUserData(TypstBuiltinResolver.STUB_MARKER, true)
+                cachedStub = file
+            }
+    }
+
+    override fun dispose() {
+        cachedStub = null
+    }
+
+    companion object {
+        fun getInstance(project: Project): TypstBuiltinStubService = project.service()
     }
 }

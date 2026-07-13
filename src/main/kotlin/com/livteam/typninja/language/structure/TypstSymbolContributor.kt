@@ -29,8 +29,7 @@ class TypstSymbolContributor : ChooseByNameContributorEx {
     ) {
         if (DumbService.isDumb(parameters.project)) return
         val seen = HashSet<String>()
-        for (symbol in TypstProjectSymbols.exportedSymbols(parameters.project, parameters.searchScope)) {
-            if (symbol.name != name) continue
+        for (symbol in TypstProjectSymbols.exportedSymbolsWithName(parameters.project, name, parameters.searchScope)) {
             val key = "${symbol.file.virtualFile?.path}:${symbol.definition.nameElement.textRange.startOffset}"
             if (!seen.add(key)) continue
             if (!processor.process(TypstNavigationItem(symbol.name, symbol.definition.declarationElement))) return

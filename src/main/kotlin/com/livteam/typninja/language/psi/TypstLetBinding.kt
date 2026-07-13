@@ -3,7 +3,6 @@ package com.livteam.typninja.language.psi
 import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNameIdentifierOwner
-import com.intellij.util.IncorrectOperationException
 
 /**
  * PSI for a `#let` binding ([TypstElementTypes.LET_BINDING]).
@@ -34,8 +33,11 @@ class TypstLetBinding(node: ASTNode) : TypstPsiElement(node), PsiNameIdentifierO
 
     override fun getName(): String? = nameIdentifier?.text
 
-    override fun setName(name: String): PsiElement =
-        throw IncorrectOperationException("Rename of Typst let bindings is not supported yet")
+    override fun setName(name: String): PsiElement {
+        val identifier = nameIdentifier ?: return this
+        identifier.replace(TypstElementFactory.createIdentifier(project, name))
+        return this
+    }
 
     /** Navigation lands on the bound name (not the leading `let` keyword) when a name exists. */
     override fun getTextOffset(): Int = nameIdentifier?.textOffset ?: super.getTextOffset()

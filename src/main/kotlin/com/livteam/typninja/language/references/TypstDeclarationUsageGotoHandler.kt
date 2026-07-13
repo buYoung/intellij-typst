@@ -2,7 +2,6 @@ package com.livteam.typninja.language.references
 
 import com.intellij.codeInsight.navigation.actions.GotoDeclarationHandler
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.livteam.typninja.language.analysis.TypstAnalysis
@@ -15,7 +14,9 @@ class TypstDeclarationUsageGotoHandler : GotoDeclarationHandler {
         val file = sourceElement?.containingFile as? TypstFile ?: return null
         val definition = definitionAt(file, offset) ?: return null
         val usages = ArrayList<PsiElement>()
-        collectReferences(file, definition.nameElement, usages)
+        TypstAnalysis.snapshot(file)?.referenceCandidates?.get(definition.name)?.forEach { candidate ->
+            candidate.references.filter { it.isReferenceTo(definition.nameElement) }.forEach { usages.add(it.element) }
+        }
         if (usages.isEmpty()) return null
         return usages.toTypedArray()
     }
@@ -25,11 +26,4 @@ class TypstDeclarationUsageGotoHandler : GotoDeclarationHandler {
         return snapshot.declarations.firstOrNull { it.nameElement.textRange.containsOffset(offset) }
     }
 
-    private fun collectReferences(element: PsiElement, target: PsiElement, usages: MutableList<PsiElement>) {
-        ProgressManager.checkCanceled()
-        for (reference in element.references) {
-            if (reference.isReferenceTo(target)) usages.add(reference.element)
-        }
-        for (child in element.children) collectReferences(child, target, usages)
-    }
 }

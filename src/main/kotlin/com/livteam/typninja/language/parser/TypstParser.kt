@@ -114,6 +114,7 @@ class TypstParser : PsiParser {
             T.HASH -> parseCodeHash(builder, depth)
             T.DOLLAR -> parseEquation(builder, depth)
             T.REF_MARKER -> parseRef(builder, depth)
+            T.LABEL_DEF -> wrapSingle(builder, E.LABEL)
             T.LBRACKET -> parseContentBlock(builder, depth)
             T.RAW_TEXT -> wrapSingle(builder, E.RAW)
             T.STRING -> wrapSingle(builder, E.STRING_LITERAL) // defensive; markup emits SMART_QUOTE
@@ -387,7 +388,7 @@ class TypstParser : PsiParser {
         if (canStartExpr(builder.tokenType)) parseCodeExpr(builder, 0, depth + 1) // source
         if (builder.tokenType == T.COLON) {
             builder.advanceLexer() // :
-            if (builder.tokenType == T.STAR) builder.advanceLexer() else parseImportItems(builder, depth)
+            parseImportItems(builder, depth)
         }
         if (builder.tokenType == T.KW_AS) {
             builder.advanceLexer() // as
@@ -396,18 +397,38 @@ class TypstParser : PsiParser {
         marker.done(E.MODULE_IMPORT)
     }
 
-    /** `item (, item)*` where each item is `path (as name)?`; paths and names are consumed as leaves. */
+    /** `item (, item)*` where each item is `path (as name)?`. */
     private fun parseImportItems(builder: PsiBuilder, depth: Int) {
         val marker = builder.mark()
         while (!builder.eof()) {
             val t = builder.tokenType
             if (t == T.PARBREAK || isCloser(t)) break
-            when {
-                t == T.IDENTIFIER || t == T.DOT || t == T.STAR -> builder.advanceLexer() // path / glob segment
-                t == T.KW_AS -> { builder.advanceLexer(); if (builder.tokenType == T.IDENTIFIER) builder.advanceLexer() }
-                t == T.COMMA -> builder.advanceLexer()
-                else -> break
+            if (t == T.COMMA) {
+                builder.advanceLexer()
+                continue
             }
+            if (t == T.STAR) {
+                val glob = builder.mark()
+                builder.advanceLexer()
+                glob.done(E.IMPORT_GLOB)
+                break
+            }
+            if (t != T.IDENTIFIER && t != T.DOT) break
+            val item = builder.mark()
+            // Keep every path segment and a trailing dot in recovery PSI.  Accepting only an
+            // identifier after a dot avoids consuming the next malformed construct as an item.
+            if (builder.tokenType == T.DOT) builder.advanceLexer()
+            while (builder.tokenType == T.IDENTIFIER) {
+                builder.advanceLexer()
+                if (builder.tokenType != T.DOT) break
+                builder.advanceLexer()
+            }
+            if (builder.tokenType == T.KW_AS) {
+                builder.advanceLexer()
+                if (builder.tokenType == T.IDENTIFIER) builder.advanceLexer()
+            }
+            item.done(E.IMPORT_ITEM)
+            if (builder.tokenType != T.COMMA) break
         }
         marker.done(E.IMPORT_ITEMS)
     }
@@ -761,7 +782,7 @@ class TypstParser : PsiParser {
 
         /** Inline prose leaves folded into a single [E.MARKUP] run. */
         private val PROSE_TOKENS: Set<IElementType> = setOf(
-            T.TEXT, T.ESCAPE, T.SHORTHAND, T.SMART_QUOTE, T.LINEBREAK, T.LINK, T.LABEL_DEF,
+            T.TEXT, T.ESCAPE, T.SHORTHAND, T.SMART_QUOTE, T.LINEBREAK, T.LINK,
         )
 
         /** Literal / atomic leaves that stand alone as a primary. */

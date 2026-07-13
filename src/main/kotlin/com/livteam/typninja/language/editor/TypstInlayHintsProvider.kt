@@ -10,9 +10,8 @@ import com.intellij.openapi.editor.Editor
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.TokenType
+import com.livteam.typninja.language.analysis.TypstSemanticModel
 import com.livteam.typninja.language.psi.TypstFile
-import com.livteam.typninja.language.references.TypstBuiltins.Parameter
-import com.livteam.typninja.language.references.TypstBuiltins
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 
@@ -48,16 +47,15 @@ internal object TypstInlayHintLogic {
         if (argument.elementType == T.LPAREN || argument.elementType == T.RPAREN) return null
         val call = args.treeParent ?: return null
         if (call.elementType != E.FUNC_CALL) return null
-        val calleeName = calleeName(call) ?: return null
-        val metadata = TypstBuiltins.metadata(calleeName) ?: return null
-        return positionalParameter(metadata.parameters, args, argument)?.name
+        val signature = TypstSemanticModel.callableForCall(call) ?: return null
+        return positionalParameter(signature.parameters, args, argument)?.name
     }
 
     private fun positionalParameter(
-        parameters: List<Parameter>,
+        parameters: List<com.livteam.typninja.language.references.TypstBuiltins.Parameter>,
         args: com.intellij.lang.ASTNode,
         argument: com.intellij.lang.ASTNode,
-    ): Parameter? {
+    ): com.livteam.typninja.language.references.TypstBuiltins.Parameter? {
         val namedArguments = namedArgumentNames(args)
         var positionalIndex = 0
         var child = args.firstChildNode
@@ -90,22 +88,4 @@ internal object TypstInlayHintLogic {
             node.elementType != T.BLOCK_COMMENT &&
             node.elementType != T.PARBREAK
 
-    private fun calleeName(call: com.intellij.lang.ASTNode): String? {
-        var child = call.firstChildNode
-        while (child != null && child.elementType == com.intellij.psi.TokenType.WHITE_SPACE) child = child.treeNext
-        return when (child?.elementType) {
-            T.IDENTIFIER -> child.text
-            E.REFERENCE_EXPR -> child.findChildByType(T.IDENTIFIER)?.text
-            E.FIELD_ACCESS -> {
-                var current = child.firstChildNode
-                var last: String? = null
-                while (current != null) {
-                    if (current.elementType == T.IDENTIFIER) last = current.text
-                    current = current.treeNext
-                }
-                last
-            }
-            else -> null
-        }
-    }
 }

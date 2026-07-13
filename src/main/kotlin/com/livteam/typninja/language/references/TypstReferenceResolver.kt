@@ -17,5 +17,5 @@ object TypstReferenceResolver {
         TypstAnalysis.resolve(usage)
 
     fun resolve(usage: TypstReferenceExpression): PsiElement? =
-        resolveResult(usage)?.definition?.nameElement
+        resolveResult(usage)?.definition?.navigationElement
 }

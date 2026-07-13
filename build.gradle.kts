@@ -23,3 +23,20 @@ dependencies {
 // no generateLexer task, and no build-time JFlex tooling: mode switching and the depth-0-only
 // restart contract require full control the JFlex `%state` model cannot express (see the design
 // spec "Build implications"). The parser is likewise hand-written (TypstParser.kt) — no Grammar-Kit.
+
+intellijPlatform {
+    // Searchable options are generated in release CI.  The current IDE build aborts this
+    // auxiliary sandbox task before packaging, although plugin compilation and instrumentation succeed.
+    buildSearchableOptions = false
+    pluginConfiguration {
+        ideaVersion {
+            sinceBuild = "252"
+            untilBuild = "252.*"
+        }
+    }
+    pluginVerification {
+        ides {
+            recommended()
+        }
+    }
+}

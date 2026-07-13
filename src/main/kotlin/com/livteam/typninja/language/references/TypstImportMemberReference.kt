@@ -3,7 +3,8 @@ package com.livteam.typninja.language.references
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReferenceBase
-import com.livteam.typninja.language.psi.TypstModuleImport
+import com.livteam.typninja.language.psi.TypstElementFactory
+import com.livteam.typninja.language.psi.TypstImportItem
 
 /**
  * Reference on an explicit import ITEM name (`foo` in `#import "utils.typ": foo`, or the `foo` of
@@ -13,16 +14,32 @@ import com.livteam.typninja.language.psi.TypstModuleImport
  * to `null`.
  */
 class TypstImportMemberReference(
-    element: TypstModuleImport,
+    element: TypstImportItem,
     rangeInElement: TextRange,
     private val path: String?,
-    private val moduleName: String,
-) : PsiReferenceBase<TypstModuleImport>(element, rangeInElement) {
+    private val sourceSegments: List<String>,
+    private val sourceSegmentIndex: Int,
+) : PsiReferenceBase<TypstImportItem>(element, rangeInElement) {
 
     override fun resolve(): PsiElement? {
         val moduleFile = TypstModuleResolver.resolveModuleFile(element.containingFile, path) ?: return null
-        return TypstModuleResolver.findExport(moduleFile, moduleName)
+        return TypstModuleResolver.findImportMember(moduleFile, sourceSegments, sourceSegmentIndex)
     }
 
     override fun getVariants(): Array<Any> = emptyArray()
+
+    override fun handleElementRename(newElementName: String): PsiElement {
+        TypstElementFactory.requireIdentifier(newElementName)
+        val renamedSegments = sourceSegments.toMutableList()
+        if (sourceSegmentIndex !in renamedSegments.indices) return element
+        renamedSegments[sourceSegmentIndex] = newElementName
+        val localName = element.localAlias
+            ?: if (sourceSegmentIndex == renamedSegments.lastIndex) newElementName else element.name.orEmpty()
+        val replacement = TypstElementFactory.createImportItem(
+            element.project,
+            renamedSegments.joinToString("."),
+            localName,
+        )
+        return element.replace(replacement)
+    }
 }

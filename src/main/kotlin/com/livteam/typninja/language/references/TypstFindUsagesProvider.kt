@@ -9,6 +9,9 @@ import com.intellij.psi.TokenType
 import com.intellij.psi.tree.TokenSet
 import com.livteam.typninja.language.lexer.TypstLexer
 import com.livteam.typninja.language.psi.TypstLetBinding
+import com.livteam.typninja.language.psi.TypstImportItem
+import com.livteam.typninja.language.psi.TypstLabelDefinition
+import com.livteam.typninja.language.psi.TypstModuleImport
 import com.livteam.typninja.language.psi.TypstTokenTypes
 
 class TypstFindUsagesProvider : FindUsagesProvider {
@@ -23,7 +26,10 @@ class TypstFindUsagesProvider : FindUsagesProvider {
         )
 
     override fun canFindUsagesFor(psiElement: PsiElement): Boolean =
-        psiElement is TypstLetBinding || psiElement.parent is TypstLetBinding
+        ownerOf(psiElement) is TypstLetBinding ||
+            ownerOf(psiElement) is TypstImportItem ||
+            ownerOf(psiElement) is TypstModuleImport ||
+            ownerOf(psiElement) is TypstLabelDefinition
 
     override fun getHelpId(psiElement: PsiElement): String? = null
 
@@ -34,6 +40,9 @@ class TypstFindUsagesProvider : FindUsagesProvider {
             } else {
                 "Typst variable"
             }
+            is TypstImportItem -> "Typst imported name"
+            is TypstModuleImport -> "Typst module alias"
+            is TypstLabelDefinition -> "Typst label"
             else -> "Typst symbol"
         }
 

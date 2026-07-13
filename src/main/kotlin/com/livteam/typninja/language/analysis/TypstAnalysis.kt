@@ -8,12 +8,14 @@ import com.intellij.psi.PsiManager
 import com.intellij.psi.TokenType
 import com.intellij.psi.util.CachedValueProvider
 import com.intellij.psi.util.CachedValuesManager
-import com.intellij.psi.util.PsiModificationTracker
 import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.psi.TypstFile
+import com.livteam.typninja.language.psi.TypstFieldAccess
 import com.livteam.typninja.language.psi.TypstReferenceExpression
+import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.references.TypstBuiltinResolver
 import com.livteam.typninja.language.references.TypstBuiltins
+import com.livteam.typninja.language.references.TypstPackageResolver
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 
@@ -23,6 +25,8 @@ enum class TypstDefinitionKind {
     PARAMETER,
     LOOP_BINDING,
     LABEL,
+    IMPORTED_SYMBOL,
+    MODULE_ALIAS,
     BUILTIN_FUNCTION,
     BUILTIN_TYPE,
     BUILTIN_MODULE,
@@ -34,24 +38,32 @@ data class TypstDefinition(
     val kind: TypstDefinitionKind,
     val nameElement: PsiElement,
     val declarationElement: PsiElement,
+    val sourceName: String = name,
+    val navigationElement: PsiElement = nameElement,
 ) {
-    val navigationElement: PsiElement
-        get() = declarationElement
 }
 
 data class TypstResolveResult(val definition: TypstDefinition)
 
 data class TypstImportItem(
     val localName: String,
-    val moduleName: String,
-    val nameNode: ASTNode,
-)
+    val sourceSegments: List<String>,
+    val sourceSegmentNodes: List<ASTNode>,
+    val localNameNode: ASTNode,
+    val itemNode: ASTNode,
+) {
+    val moduleName: String get() = sourceSegments.lastOrNull().orEmpty()
+    val sourcePath: String get() = sourceSegments.joinToString(".")
+    val nameNode: ASTNode get() = sourceSegmentNodes.lastOrNull() ?: localNameNode
+}
 
 data class TypstImportSummary(
     val pathString: String?,
     val items: List<TypstImportItem>,
     val isGlob: Boolean,
     val isPackageImport: Boolean,
+    val moduleAlias: String?,
+    val moduleAliasNode: ASTNode?,
 )
 
 data class TypstLocatedImport(
@@ -74,6 +86,7 @@ data class TypstAnalysisSnapshot(
     val labels: List<TypstDefinition>,
     val headings: List<PsiElement>,
     val pathLiterals: List<TypstPathLiteral>,
+    val referenceCandidates: Map<String, List<PsiElement>>,
 ) {
     fun exportedDefinition(name: String): TypstDefinition? =
         declarations.firstOrNull { it.name == name && isTopLevelExport(it.declarationElement.node) }
@@ -95,22 +108,25 @@ object TypstAnalysis {
 
     fun snapshot(file: PsiFile): TypstAnalysisSnapshot? {
         val typstFile = file as? TypstFile ?: file.originalFile as? TypstFile ?: return null
+        val projectModel = TypstProjectModelService.getInstance(typstFile.project)
         return CachedValuesManager.getCachedValue(typstFile) {
-            CachedValueProvider.Result.create(buildSnapshot(typstFile), PsiModificationTracker.MODIFICATION_COUNT)
+            CachedValueProvider.Result.create(buildSnapshot(typstFile), typstFile, projectModel)
         }
     }
 
     fun parseImport(moduleImport: ASTNode): TypstImportSummary {
         val path = moduleImport.findChildByType(E.STRING_LITERAL)?.let { unquote(it.text) }
         val itemsNode = moduleImport.findChildByType(E.IMPORT_ITEMS)
-        val isGlob = moduleImport.findChildByType(T.STAR) != null ||
-            (itemsNode != null && itemsNode.findChildByType(T.STAR) != null)
+        val isGlob = itemsNode?.findChildByType(E.IMPORT_GLOB) != null
         val items = if (itemsNode == null) emptyList() else parseItems(itemsNode)
+        val moduleAliasNode = moduleAliasNode(moduleImport)
         return TypstImportSummary(
             pathString = path,
             items = items,
             isGlob = isGlob,
             isPackageImport = path?.startsWith("@") == true,
+            moduleAlias = moduleAliasNode?.text,
+            moduleAliasNode = moduleAliasNode,
         )
     }
 
@@ -136,24 +152,68 @@ object TypstAnalysis {
         val snapshot = snapshot(usageFile) ?: return null
         for (locatedImport in snapshot.imports) {
             val summary = locatedImport.summary
-            val importItem = summary.items.firstOrNull { it.localName == name }
-            if (summary.isPackageImport && importItem != null) {
-                val definition = TypstDefinition(
-                    name = importItem.localName,
-                    kind = TypstDefinitionKind.LET_VARIABLE,
-                    nameElement = importItem.nameNode.psi,
-                    declarationElement = locatedImport.node.psi,
+            if (summary.moduleAlias == name) {
+                val nameNode = summary.moduleAliasNode ?: continue
+                val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString)
+                return TypstResolveResult(
+                    TypstDefinition(
+                        name = name,
+                        kind = TypstDefinitionKind.MODULE_ALIAS,
+                        nameElement = nameNode.psi,
+                        declarationElement = locatedImport.node.psi,
+                        navigationElement = moduleFile ?: nameNode.psi,
+                    ),
                 )
-                return TypstResolveResult(definition)
             }
-            val moduleName = importItem?.moduleName
-                ?: (if (summary.isGlob) name else null)
-                ?: continue
+            val importItem = summary.items.firstOrNull { it.localName == name }
+            if (importItem != null) {
+                // A dotted import's final local name is not an independently proven export.  Do
+                // not present its import item as a resolved source target until module traversal
+                // can establish every intermediate member as a module.
+                if (importItem.sourceSegments.size != 1) continue
+                val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString)
+                if (moduleFile == null && !summary.isPackageImport) continue
+                val exportedDefinition = moduleFile?.let {
+                    if (importItem.sourceSegments.size == 1) snapshot(it)?.exportedDefinition(importItem.moduleName) else null
+                }
+                if (exportedDefinition != null) return TypstResolveResult(exportedDefinition)
+                return TypstResolveResult(
+                    TypstDefinition(
+                        name = importItem.localName,
+                        kind = TypstDefinitionKind.IMPORTED_SYMBOL,
+                        nameElement = importItem.localNameNode.psi,
+                        declarationElement = importItem.itemNode.psi,
+                        sourceName = importItem.moduleName,
+                        navigationElement = exportedDefinition?.navigationElement ?: importItem.localNameNode.psi,
+                    ),
+                )
+            }
+            if (!summary.isGlob) continue
             val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString) ?: continue
-            val exportedDefinition = snapshot(moduleFile)?.exportedDefinition(moduleName) ?: continue
+            val exportedDefinition = snapshot(moduleFile)?.exportedDefinition(name) ?: continue
             return TypstResolveResult(exportedDefinition)
         }
         return null
+    }
+
+    fun fieldDefinitions(fieldAccess: TypstFieldAccess): List<TypstDefinition> {
+        val qualifier = fieldAccess.qualifierName ?: return emptyList()
+        val fileSnapshot = snapshot(fieldAccess.containingFile) ?: return emptyList()
+        val moduleImport = fileSnapshot.imports.firstOrNull { it.summary.moduleAlias == qualifier }
+        if (moduleImport != null) {
+            val moduleFile = TypstModuleFiles.resolveModuleFile(fieldAccess.containingFile, moduleImport.summary.pathString)
+                ?: return emptyList()
+            return snapshot(moduleFile)?.exportedDefinitions().orEmpty()
+        }
+        return TypstBuiltins.moduleMembers(qualifier).mapNotNull { metadata ->
+            val target = TypstBuiltinResolver.resolve(fieldAccess.project, metadata.name) ?: return@mapNotNull null
+            TypstDefinition(metadata.name, TypstDefinitionKind.BUILTIN_FUNCTION, target, target)
+        }
+    }
+
+    fun resolveField(fieldAccess: TypstFieldAccess): TypstDefinition? {
+        val member = fieldAccess.memberName ?: return null
+        return fieldDefinitions(fieldAccess).firstOrNull { it.name == member }
     }
 
     fun resolveBuiltin(anchor: TypstReferenceExpression, name: String): TypstResolveResult? {
@@ -174,9 +234,10 @@ object TypstAnalysis {
         val labels = ArrayList<TypstDefinition>()
         val headings = ArrayList<PsiElement>()
         val pathLiterals = ArrayList<TypstPathLiteral>()
+        val referenceCandidates = LinkedHashMap<String, MutableList<PsiElement>>()
         val root = file.node
-        collect(root, declarations, imports, labels, headings, pathLiterals)
-        return TypstAnalysisSnapshot(file, declarations, imports, labels, headings, pathLiterals)
+        collect(root, declarations, imports, labels, headings, pathLiterals, referenceCandidates)
+        return TypstAnalysisSnapshot(file, declarations, imports, labels, headings, pathLiterals, referenceCandidates)
     }
 
     private fun collect(
@@ -186,6 +247,7 @@ object TypstAnalysis {
         labels: MutableList<TypstDefinition>,
         headings: MutableList<PsiElement>,
         pathLiterals: MutableList<TypstPathLiteral>,
+        referenceCandidates: MutableMap<String, MutableList<PsiElement>>,
     ) {
         ProgressManager.checkCanceled()
         when (node.elementType) {
@@ -196,14 +258,21 @@ object TypstAnalysis {
             E.MODULE_IMPORT -> imports.add(TypstLocatedImport(node, parseImport(node)))
             E.MODULE_INCLUDE -> collectIncludePath(node, pathLiterals)
             E.HEADING -> headings.add(node.psi)
+            E.REFERENCE_EXPR -> (node.psi as? TypstReferenceExpression)?.referenceName?.takeIf(String::isNotEmpty)
+                ?.let { name -> referenceCandidates.getOrPut(name, ::ArrayList).add(node.psi) }
+            E.REF -> (node.psi as? TypstRef)?.referenceName?.takeIf(String::isNotEmpty)
+                ?.let { name -> referenceCandidates.getOrPut(name, ::ArrayList).add(node.psi) }
         }
-        if (node.elementType == T.LABEL_DEF) {
-            val name = labelName(node.text)
-            if (name.isNotEmpty()) labels.add(TypstDefinition(name, TypstDefinitionKind.LABEL, node.psi, node.psi))
+        if (node.elementType == E.LABEL) {
+            val labelNode = node.findChildByType(T.LABEL_DEF)
+            val name = labelNode?.text?.let(::labelName).orEmpty()
+            if (name.isNotEmpty() && labelNode != null) {
+                labels.add(TypstDefinition(name, TypstDefinitionKind.LABEL, labelNode.psi, node.psi))
+            }
         }
         var child = node.firstChildNode
         while (child != null) {
-            collect(child, declarations, imports, labels, headings, pathLiterals)
+            collect(child, declarations, imports, labels, headings, pathLiterals, referenceCandidates)
             child = child.treeNext
         }
     }
@@ -324,19 +393,36 @@ object TypstAnalysis {
         val items = ArrayList<TypstImportItem>()
         var child = itemsNode.firstChildNode
         while (child != null) {
-            if (child.elementType == T.IDENTIFIER) {
-                val nameNode = child
-                val moduleName = nameNode.text
+            if (child.elementType == E.IMPORT_ITEM) {
+                val sourceNodes = importSourceNodes(child)
+                if (sourceNodes.isEmpty()) {
+                    child = child.treeNext
+                    continue
+                }
+                val nameNode = sourceNodes.last()
                 val asKeyword = nextMeaningfulSibling(nameNode)
                 val alias = if (asKeyword?.elementType == T.KW_AS) nextMeaningfulSibling(asKeyword) else null
-                val localName = if (alias?.elementType == T.IDENTIFIER) alias.text else moduleName
-                items.add(TypstImportItem(localName, moduleName, nameNode))
-                child = if (alias?.elementType == T.IDENTIFIER) alias.treeNext else nameNode.treeNext
-            } else {
-                child = child.treeNext
+                val localNameNode = alias?.takeIf { it.elementType == T.IDENTIFIER } ?: nameNode
+                items.add(TypstImportItem(localNameNode.text, sourceNodes.map { it.text }, sourceNodes, localNameNode, child))
             }
+            child = child.treeNext
         }
         return items
+    }
+
+    private fun moduleAliasNode(moduleImport: ASTNode): ASTNode? {
+        var sawAs = false
+        var child = moduleImport.firstChildNode
+        while (child != null) {
+            if (child.elementType == E.IMPORT_ITEMS) {
+                child = child.treeNext
+                continue
+            }
+            if (child.elementType == T.KW_AS) sawAs = true
+            else if (sawAs && child.elementType == T.IDENTIFIER) return child
+            child = child.treeNext
+        }
+        return null
     }
 
     private fun isInLoopBody(forLoop: ASTNode, usageOffset: Int): Boolean {
@@ -372,6 +458,26 @@ object TypstAnalysis {
         return null
     }
 
+    private fun directChildrenOfType(node: ASTNode, type: IElementType): List<ASTNode> {
+        val children = ArrayList<ASTNode>()
+        var child = node.firstChildNode
+        while (child != null) {
+            if (child.elementType == type) children.add(child)
+            child = child.treeNext
+        }
+        return children
+    }
+
+    private fun importSourceNodes(item: ASTNode): List<ASTNode> {
+        val nodes = ArrayList<ASTNode>()
+        var child = item.firstChildNode
+        while (child != null && child.elementType != T.KW_AS) {
+            if (child.elementType == T.IDENTIFIER) nodes.add(child)
+            child = child.treeNext
+        }
+        return nodes
+    }
+
     private fun firstMeaningfulChild(node: ASTNode): ASTNode? {
         var child = node.firstChildNode
         while (child != null && isSkippable(child.elementType)) child = child.treeNext
@@ -405,7 +511,11 @@ object TypstAnalysis {
 object TypstModuleFiles {
 
     fun resolveModuleFile(importingFile: PsiFile, pathString: String?): TypstFile? {
-        if (pathString.isNullOrEmpty() || pathString.startsWith("@")) return null
+        if (pathString.isNullOrEmpty()) return null
+        if (pathString.startsWith("@")) {
+            val target = TypstPackageResolver.resolveEntrypoint(importingFile.project, pathString) ?: return null
+            return PsiManager.getInstance(importingFile.project).findFile(target) as? TypstFile
+        }
         val base = (importingFile.virtualFile ?: importingFile.originalFile.virtualFile)?.parent ?: return null
         val target = base.findFileByRelativePath(pathString)
             ?: (if (!pathString.endsWith(".typ")) base.findFileByRelativePath("$pathString.typ") else null)

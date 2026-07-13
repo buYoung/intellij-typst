@@ -3,7 +3,6 @@ package com.livteam.typninja.language.editor
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerBase
 import com.intellij.codeInsight.highlighting.HighlightUsagesHandlerFactory
 import com.intellij.openapi.editor.Editor
-import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.intellij.psi.PsiReference
@@ -45,18 +44,14 @@ private class TypstSymbolHighlightUsagesHandler(
 
     override fun computeUsages(targets: List<PsiElement>) {
         val target = targets.firstOrNull() ?: return
-        collectReferences(myFile) { reference ->
-            if (reference.isReferenceTo(target)) {
-                myReadUsages.add(reference.element.textRange)
-            }
+        val candidates = com.livteam.typninja.language.analysis.TypstAnalysis.snapshot(myFile)
+            ?.referenceCandidates
+            ?.get(source.referenceName)
+            .orEmpty()
+        candidates.forEach { candidate ->
+            candidate.references.filter { it.isReferenceTo(target) }.forEach { reference -> myReadUsages.add(reference.element.textRange) }
         }
         myReadUsages.add(target.textRange)
-    }
-
-    private fun collectReferences(element: PsiElement, consumer: (PsiReference) -> Unit) {
-        ProgressManager.checkCanceled()
-        for (reference in element.references) consumer(reference)
-        for (child in element.children) collectReferences(child, consumer)
     }
 }
 
@@ -76,15 +71,13 @@ private class TypstLabelHighlightUsagesHandler(
     override fun computeUsages(targets: List<PsiElement>) {
         val label = targets.firstOrNull() ?: return
         val name = TypstLabelResolver.labelName(label.text)
-        collectRefs(myFile, name)
+        com.livteam.typninja.language.analysis.TypstAnalysis.snapshot(myFile)
+            ?.referenceCandidates
+            ?.get(name)
+            .orEmpty()
+            .filterIsInstance<TypstRef>()
+            .filter { it.reference?.resolve() != null }
+            .forEach { myReadUsages.add(it.textRange) }
         myReadUsages.add(label.textRange)
-    }
-
-    private fun collectRefs(element: PsiElement, name: String) {
-        ProgressManager.checkCanceled()
-        if (element is TypstRef && element.referenceName == name && element.reference?.resolve() != null) {
-            myReadUsages.add(element.textRange)
-        }
-        for (child in element.children) collectRefs(child, name)
     }
 }
