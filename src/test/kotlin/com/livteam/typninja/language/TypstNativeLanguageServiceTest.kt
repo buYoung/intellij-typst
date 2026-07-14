@@ -1,6 +1,5 @@
 package com.livteam.typninja.language
 
-import com.intellij.codeInsight.navigation.actions.GotoDeclarationAction
 import com.intellij.openapi.actionSystem.IdeActions
 import com.intellij.testFramework.fixtures.BasePlatformTestCase
 import com.livteam.typninja.language.editor.TypstWordSelectionHandler
@@ -38,21 +37,6 @@ class TypstNativeLanguageServiceTest : BasePlatformTestCase() {
             "exported-value",
             "#let ".length,
         )
-    }
-
-    fun testDeclarationSideGotoDeclarationReturnsSingleUsageTarget() {
-        myFixture.configureByText("test.typ", "#let va<caret>lue = 1\n#value\n")
-
-        val targets = GotoDeclarationAction.findAllTargetElements(
-            project,
-            myFixture.editor,
-            myFixture.caretOffset,
-        )
-
-        assertNotNull("declaration-side goto must produce usage targets", targets)
-        assertEquals("single usage should be a single direct target", 1, targets!!.size)
-        assertEquals("value", targets.single().text)
-        assertEquals(myFixture.editor.document.text.lastIndexOf("value"), targets.single().textRange.startOffset)
     }
 
     fun testImportedSymbolUsageResolvesToExportedDefinition() {

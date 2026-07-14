@@ -135,7 +135,7 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
 
             if (!summary.isGlob) continue
             val moduleFile = TypstModuleFiles.resolveModuleFile(sourceFile(parameters), summary.pathString) ?: continue
-            for (definition in TypstAnalysis.snapshot(moduleFile)?.exportedDefinitions().orEmpty()) {
+            for (definition in TypstAnalysis.exportedDefinitions(moduleFile)) {
                 if (seenNames.add(definition.name)) {
                     result.addElement(
                         LookupElementBuilder.create(definition.name)
@@ -189,7 +189,7 @@ private object TypstCompletionProvider : CompletionProvider<CompletionParameters
         result: CompletionResultSet,
     ) {
         val moduleFile = TypstModuleFiles.resolveModuleFile(sourceFile(parameters), pathString) ?: return
-        for (definition in TypstAnalysis.snapshot(moduleFile)?.exportedDefinitions().orEmpty()) {
+        for (definition in TypstAnalysis.exportedDefinitions(moduleFile)) {
             result.addElement(
                 LookupElementBuilder.create(definition.name)
                     .withTypeText(typeText(definition.kind), true),

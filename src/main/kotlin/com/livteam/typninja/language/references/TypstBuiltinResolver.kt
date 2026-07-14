@@ -47,7 +47,17 @@ object TypstBuiltinResolver {
         appendLine("// Placeholders so Go To Declaration on a builtin lands here; the real")
         appendLine("// implementations live in the Typst compiler. Docs: https://typst.app/docs/reference/")
         appendLine()
-        for (name in TypstBuiltins.allStubNames()) appendLine("#let $name = none")
+        for (name in TypstBuiltins.allStubNames()) {
+            val metadata = TypstBuiltins.stubMetadata(name)
+            if (metadata?.kind == TypstBuiltins.Kind.FUNCTION) {
+                val parameters = metadata.parameters.ifEmpty { listOf(TypstBuiltins.Parameter("arguments")) }
+                append("#let ").append(name).append('(')
+                append(parameters.joinToString { "${it.name}: none" })
+                appendLine(") = none")
+            } else {
+                appendLine("#let $name = none")
+            }
+        }
     }
 }
 

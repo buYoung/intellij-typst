@@ -118,6 +118,7 @@ object TypstElementTypes {
         MODULE_IMPORT -> TypstModuleImport(node)
         IMPORT_ITEM -> TypstImportItem(node)
         FIELD_ACCESS -> TypstFieldAccess(node)
+        NAMED -> TypstNamedArgument(node)
         STRING_LITERAL -> TypstStringLiteral(node)
         else -> TypstPsiElement(node)
     }

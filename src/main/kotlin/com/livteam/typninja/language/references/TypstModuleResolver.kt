@@ -36,7 +36,7 @@ object TypstModuleResolver {
         TypstModuleFiles.resolveModuleFile(importingFile, pathString)
 
     fun findExport(moduleFile: TypstFile, name: String): PsiElement? =
-        TypstAnalysis.snapshot(moduleFile)?.exportedDefinition(name)?.nameElement
+        TypstAnalysis.exportedDefinition(moduleFile, name)?.navigationElement
 
     /** Resolves only the proven exported qualifier; dynamic nested members remain unresolved. */
     fun findImportMember(moduleFile: TypstFile, sourceSegments: List<String>, segmentIndex: Int): PsiElement? {

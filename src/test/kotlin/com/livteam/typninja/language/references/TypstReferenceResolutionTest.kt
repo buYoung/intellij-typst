@@ -150,8 +150,8 @@ class TypstReferenceResolutionTest : BasePlatformTestCase() {
         assertFalse("a .field member must not be a reference", hasReferenceAtCaret("#obj.fie<caret>ld\n"))
     }
 
-    fun testNamedArgumentKeyCarriesNoReference() {
-        assertFalse("a named-argument key must not be a reference", hasReferenceAtCaret("#table(colu<caret>mns: 2)\n"))
+    fun testNamedArgumentKeyCarriesParameterReference() {
+        assertTrue("a known named-argument key must navigate to its parameter", hasReferenceAtCaret("#table(colu<caret>mns: 2)\n"))
     }
 
     fun testImportClauseSyntaxDoesNotCreateGeneralReferences() {

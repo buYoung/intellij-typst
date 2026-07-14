@@ -5,6 +5,7 @@ import com.intellij.lang.annotation.AnnotationHolder
 import com.intellij.lang.annotation.Annotator
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.openapi.editor.colors.TextAttributesKey
+import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
@@ -32,7 +33,7 @@ import com.livteam.typninja.language.references.TypstReferenceResolver
  * or a deep PSI walk, so it is fast enough to run on every keystroke and fails soft — if an attribute
  * cannot be applied the base lexer colors remain. Registered via `<annotator language="Typst" .../>`.
  */
-class TypstAnnotator : Annotator {
+class TypstAnnotator : Annotator, DumbAware {
 
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         val node = element.node ?: return
@@ -215,7 +216,7 @@ class TypstAnnotator : Annotator {
             }
             val referenceExpression = reference.psi as? TypstReferenceExpression ?: return emptyList()
             val result = TypstReferenceResolver.resolveResult(referenceExpression) ?: return emptyList()
-            val key = keyForDefinitionKind(result.definition.kind) ?: return emptyList()
+            val key = keyForDefinitionKind(result.definition.effectiveKind) ?: return emptyList()
             val nameNode = firstDirectChildOfType(reference, TypstTokenTypes.IDENTIFIER) ?: reference
             return listOf(nameNode.textRange to key)
         }

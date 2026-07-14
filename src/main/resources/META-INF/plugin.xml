@@ -65,7 +65,7 @@
                                  implementationClass="com.livteam.typninja.language.references.TypstFindUsagesProvider"/>
         <lang.refactoringSupport language="Typst"
                                  implementationClass="com.livteam.typninja.language.references.TypstRefactoringSupportProvider"/>
-        <gotoDeclarationHandler implementation="com.livteam.typninja.language.references.TypstDeclarationUsageGotoHandler"/>
+        <typeDeclarationProvider implementation="com.livteam.typninja.language.references.TypstTypeDeclarationProvider"/>
         <completion.contributor language="Typst"
                                 implementationClass="com.livteam.typninja.language.completion.TypstCompletionContributor"/>
         <lang.documentationProvider language="Typst"

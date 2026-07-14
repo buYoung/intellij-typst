@@ -82,7 +82,7 @@ object TypstDiagnosticEngine {
                 E.NAMED -> {
                     val name = child.findChildByType(T.IDENTIFIER)?.text ?: ""
                     if (name.isNotEmpty() && !named.add(name)) diagnostics.add(semantic(child, "Duplicate named argument `$name`"))
-                    if (name.isNotEmpty() && signature.parameters.none { it.name == name }) {
+                    if (name.isNotEmpty() && signature.isParameterListComplete && signature.parameters.none { it.name == name }) {
                         diagnostics.add(semantic(child, "Unknown named argument `$name`"))
                     }
                 }

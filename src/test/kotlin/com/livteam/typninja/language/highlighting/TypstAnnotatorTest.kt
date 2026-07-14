@@ -87,8 +87,8 @@ class TypstAnnotatorTest : BasePlatformTestCase() {
 
     fun testVariableDefinitionKeyUsesThemeFallbackOnly() {
         assertSame(
-            "variable definitions must inherit the current scheme's identifier color",
-            DefaultLanguageHighlighterColors.IDENTIFIER,
+            "variable definitions must inherit the current scheme's local-variable color",
+            DefaultLanguageHighlighterColors.LOCAL_VARIABLE,
             TypstTextAttributeKeys.VARIABLE_DEFINITION.fallbackAttributeKey,
         )
     }

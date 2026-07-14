@@ -40,6 +40,8 @@ data class TypstDefinition(
     val declarationElement: PsiElement,
     val sourceName: String = name,
     val navigationElement: PsiElement = nameElement,
+    /** The original symbol category after imports and aliases are followed. */
+    val effectiveKind: TypstDefinitionKind = kind,
 ) {
 }
 
@@ -105,6 +107,14 @@ data class TypstAnalysisSnapshot(
 }
 
 object TypstAnalysis {
+
+    /** Returns everything that another Typst file can import, including re-exported imports. */
+    fun exportedDefinitions(file: PsiFile): List<TypstDefinition> =
+        exportedDefinitions(file, LinkedHashSet())
+
+    /** Resolves one exported name through any number of import/re-export hops. */
+    fun exportedDefinition(file: PsiFile, name: String): TypstDefinition? =
+        exportedDefinition(file, name, LinkedHashSet())
 
     fun snapshot(file: PsiFile): TypstAnalysisSnapshot? {
         val typstFile = file as? TypstFile ?: file.originalFile as? TypstFile ?: return null
@@ -174,9 +184,11 @@ object TypstAnalysis {
                 val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString)
                 if (moduleFile == null && !summary.isPackageImport) continue
                 val exportedDefinition = moduleFile?.let {
-                    if (importItem.sourceSegments.size == 1) snapshot(it)?.exportedDefinition(importItem.moduleName) else null
+                    if (importItem.sourceSegments.size == 1) exportedDefinition(it, importItem.moduleName) else null
                 }
-                if (exportedDefinition != null) return TypstResolveResult(exportedDefinition)
+                if (exportedDefinition != null) {
+                    return TypstResolveResult(importedDefinition(importItem, exportedDefinition))
+                }
                 return TypstResolveResult(
                     TypstDefinition(
                         name = importItem.localName,
@@ -190,7 +202,7 @@ object TypstAnalysis {
             }
             if (!summary.isGlob) continue
             val moduleFile = TypstModuleFiles.resolveModuleFile(usageFile, summary.pathString) ?: continue
-            val exportedDefinition = snapshot(moduleFile)?.exportedDefinition(name) ?: continue
+            val exportedDefinition = exportedDefinition(moduleFile, name) ?: continue
             return TypstResolveResult(exportedDefinition)
         }
         return null
@@ -203,7 +215,7 @@ object TypstAnalysis {
         if (moduleImport != null) {
             val moduleFile = TypstModuleFiles.resolveModuleFile(fieldAccess.containingFile, moduleImport.summary.pathString)
                 ?: return emptyList()
-            return snapshot(moduleFile)?.exportedDefinitions().orEmpty()
+            return exportedDefinitions(moduleFile)
         }
         return TypstBuiltins.moduleMembers(qualifier).mapNotNull { metadata ->
             val target = TypstBuiltinResolver.resolve(fieldAccess.project, metadata.name) ?: return@mapNotNull null
@@ -227,6 +239,115 @@ object TypstAnalysis {
         val target = TypstBuiltinResolver.resolve(anchor, name) ?: return null
         return TypstResolveResult(TypstDefinition(name, kind, target, target))
     }
+
+    private fun exportedDefinition(
+        file: PsiFile,
+        name: String,
+        visitingFiles: MutableSet<PsiFile>,
+    ): TypstDefinition? {
+        if (!visitingFiles.add(file)) return null
+        try {
+            val fileSnapshot = snapshot(file) ?: return null
+            fileSnapshot.exportedDefinition(name)?.let { return it }
+            for (locatedImport in fileSnapshot.imports) {
+                ProgressManager.checkCanceled()
+                val summary = locatedImport.summary
+                if (summary.moduleAlias == name) {
+                    val aliasNode = summary.moduleAliasNode ?: continue
+                    val moduleFile = TypstModuleFiles.resolveModuleFile(file, summary.pathString)
+                    return TypstDefinition(
+                        name = name,
+                        kind = TypstDefinitionKind.MODULE_ALIAS,
+                        nameElement = aliasNode.psi,
+                        declarationElement = locatedImport.node.psi,
+                        navigationElement = moduleFile ?: aliasNode.psi,
+                    )
+                }
+                val item = summary.items.firstOrNull { it.localName == name }
+                if (item != null && item.sourceSegments.size == 1) {
+                    val moduleFile = TypstModuleFiles.resolveModuleFile(file, summary.pathString)
+                    val source = moduleFile?.let { exportedDefinition(it, item.moduleName, visitingFiles) }
+                    if (source != null) return importedDefinition(item, source)
+                    if (summary.isPackageImport) {
+                        return TypstDefinition(
+                            name = item.localName,
+                            kind = TypstDefinitionKind.IMPORTED_SYMBOL,
+                            nameElement = item.localNameNode.psi,
+                            declarationElement = item.itemNode.psi,
+                            sourceName = item.moduleName,
+                        )
+                    }
+                }
+                if (!summary.isGlob) continue
+                val moduleFile = TypstModuleFiles.resolveModuleFile(file, summary.pathString) ?: continue
+                exportedDefinition(moduleFile, name, visitingFiles)?.let { return it }
+            }
+            return null
+        } finally {
+            visitingFiles.remove(file)
+        }
+    }
+
+    private fun exportedDefinitions(
+        file: PsiFile,
+        visitingFiles: MutableSet<PsiFile>,
+    ): List<TypstDefinition> {
+        if (!visitingFiles.add(file)) return emptyList()
+        try {
+            val fileSnapshot = snapshot(file) ?: return emptyList()
+            val definitions = LinkedHashMap<String, TypstDefinition>()
+            fileSnapshot.exportedDefinitions().forEach { definitions.putIfAbsent(it.name, it) }
+            for (locatedImport in fileSnapshot.imports) {
+                ProgressManager.checkCanceled()
+                val summary = locatedImport.summary
+                val moduleFile = TypstModuleFiles.resolveModuleFile(file, summary.pathString)
+                summary.moduleAliasNode?.let { aliasNode ->
+                    definitions.putIfAbsent(
+                        aliasNode.text,
+                        TypstDefinition(
+                            name = aliasNode.text,
+                            kind = TypstDefinitionKind.MODULE_ALIAS,
+                            nameElement = aliasNode.psi,
+                            declarationElement = locatedImport.node.psi,
+                            navigationElement = moduleFile ?: aliasNode.psi,
+                        ),
+                    )
+                }
+                for (item in summary.items) {
+                    if (item.sourceSegments.size != 1) continue
+                    val source = moduleFile?.let { exportedDefinition(it, item.moduleName, visitingFiles) }
+                    val imported = source?.let { importedDefinition(item, it) }
+                        ?: if (summary.isPackageImport) {
+                            TypstDefinition(
+                                name = item.localName,
+                                kind = TypstDefinitionKind.IMPORTED_SYMBOL,
+                                nameElement = item.localNameNode.psi,
+                                declarationElement = item.itemNode.psi,
+                                sourceName = item.moduleName,
+                            )
+                        } else null
+                    if (imported != null) definitions.putIfAbsent(item.localName, imported)
+                }
+                if (summary.isGlob && moduleFile != null) {
+                    exportedDefinitions(moduleFile, visitingFiles).forEach { definitions.putIfAbsent(it.name, it) }
+                }
+            }
+            return definitions.values.toList()
+        } finally {
+            visitingFiles.remove(file)
+        }
+    }
+
+    private fun importedDefinition(item: TypstImportItem, source: TypstDefinition): TypstDefinition =
+        TypstDefinition(
+            name = item.localName,
+            kind = TypstDefinitionKind.IMPORTED_SYMBOL,
+            nameElement = item.localNameNode.psi,
+            declarationElement = item.itemNode.psi,
+            sourceName = item.moduleName,
+            navigationElement = source.navigationElement,
+            effectiveKind = source.effectiveKind,
+        )
 
     private fun buildSnapshot(file: TypstFile): TypstAnalysisSnapshot {
         val declarations = ArrayList<TypstDefinition>()
