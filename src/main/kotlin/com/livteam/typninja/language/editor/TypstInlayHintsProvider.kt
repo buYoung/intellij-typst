@@ -12,6 +12,7 @@ import com.intellij.psi.PsiFile
 import com.intellij.psi.TokenType
 import com.livteam.typninja.language.analysis.TypstSemanticModel
 import com.livteam.typninja.language.psi.TypstFile
+import com.livteam.typninja.settings.TypstSettingsService
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 
@@ -19,6 +20,7 @@ class TypstInlayHintsProvider : InlayHintsProvider {
 
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
         if (file !is TypstFile) return null
+        if (TypstSettingsService.getInstance(file.project).state.syntaxOnlyMode) return null
         return TypstInlayHintsCollector
     }
 }

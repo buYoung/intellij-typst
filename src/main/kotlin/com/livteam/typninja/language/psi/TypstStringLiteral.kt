@@ -15,15 +15,14 @@ class TypstStringLiteral(node: ASTNode) : TypstPsiElement(node) {
 
     override fun getReferences(): Array<PsiReference> {
         val path = unquote(text)
-        if (path.isEmpty() || path.startsWith("@")) {
-            return PsiReference.EMPTY_ARRAY
-        }
+        if (path.isEmpty()) return PsiReference.EMPTY_ARRAY
         val range = if (text.length >= 2) TextRange(1, text.length - 1) else TextRange(0, text.length)
         if ((path.startsWith("http://") || path.startsWith("https://")) && isLinkDestination()) {
             return arrayOf(WebReference(this, range, path))
         }
         val isModulePath = ancestor(TypstElementTypes.MODULE_IMPORT) != null ||
             ancestor(TypstElementTypes.MODULE_INCLUDE) != null
+        if (path.startsWith("@") && !isModulePath) return PsiReference.EMPTY_ARRAY
         if (!isModulePath && pathFunctionName() == null) return PsiReference.EMPTY_ARRAY
         return arrayOf(TypstStringPathReference(this, range, path, isModulePath))
     }

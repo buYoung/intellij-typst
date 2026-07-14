@@ -18,5 +18,21 @@ class TypstImportPathReference(element: TypstModuleImport, rangeInElement: TextR
     override fun resolve(): PsiElement? =
         TypstModuleResolver.resolveModuleFile(element.containingFile, path)
 
-    override fun getVariants(): Array<Any> = emptyArray()
+    override fun getVariants(): Array<Any> {
+        if (path.startsWith('@')) return TypstPackageResolver.installedSpecifications(element.project).toTypedArray()
+        val baseDirectory = (element.containingFile.virtualFile ?: element.containingFile.originalFile.virtualFile)?.parent
+            ?: return emptyArray()
+        val directoryPrefix = path.substringBeforeLast('/', missingDelimiterValue = "")
+        val directory = if (directoryPrefix.isEmpty()) baseDirectory
+        else baseDirectory.findFileByRelativePath(directoryPrefix) ?: return emptyArray()
+        return directory.children.asSequence()
+            .filter { it.isDirectory || it.extension == "typ" }
+            .sortedBy { it.name.lowercase() }
+            .map { child ->
+                val prefix = if (directoryPrefix.isEmpty()) "" else "$directoryPrefix/"
+                prefix + child.name + if (child.isDirectory) "/" else ""
+            }
+            .toList()
+            .toTypedArray()
+    }
 }

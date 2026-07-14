@@ -9,11 +9,13 @@ import com.intellij.psi.PsiElement
 import com.livteam.typninja.language.analysis.TypstAnalysis
 import com.livteam.typninja.language.analysis.TypstDiagnosticCategory
 import com.livteam.typninja.language.analysis.TypstDiagnosticEngine
+import com.livteam.typninja.language.actions.TypstTextEditIntention
 import com.livteam.typninja.language.analysis.TypstModuleFiles
 import com.livteam.typninja.language.psi.TypstModuleImport
 import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.references.TypstBuiltins
+import com.livteam.typninja.language.references.TypstLabelResolver
 import com.livteam.typninja.settings.TypstSettingsService
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 import com.livteam.typninja.language.psi.TypstElementTypes as E
@@ -22,11 +24,18 @@ class TypstDiagnosticsAnnotator : Annotator, DumbAware {
 
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         val settings = TypstSettingsService.getInstance(element.project).state
+        if (settings.syntaxOnlyMode) return
         if (!settings.enableSemanticDiagnostics && !settings.enableLint) return
         TypstDiagnosticEngine.diagnosticsFor(element).forEach { diagnostic ->
             val enabled = diagnostic.category == TypstDiagnosticCategory.SEMANTIC && settings.enableSemanticDiagnostics ||
                 diagnostic.category == TypstDiagnosticCategory.LINT && settings.enableLint
-            if (enabled) holder.newAnnotation(diagnostic.severity, diagnostic.message).range(diagnostic.range).create()
+            if (enabled) {
+                val builder = holder.newAnnotation(diagnostic.severity, diagnostic.message).range(diagnostic.range)
+                diagnostic.fix?.let { fix ->
+                    builder.withFix(TypstTextEditIntention(fix.text, element, fix.range, fix.replacement))
+                }
+                builder.create()
+            }
         }
         when (element) {
             is TypstReferenceExpression -> {
@@ -53,11 +62,12 @@ class TypstDiagnosticsAnnotator : Annotator, DumbAware {
         holder.newAnnotation(HighlightSeverity.ERROR, "Standalone `box` does not produce content; call it with parentheses or a content block")
             .range(element.textRange)
             .highlightType(ProblemHighlightType.GENERIC_ERROR)
+            .withFix(TypstTextEditIntention("Call `box`", element, element.textRange, "box()"))
             .create()
     }
 
     private fun annotateLabelReference(element: TypstRef, holder: AnnotationHolder) {
-        if (element.referenceName.isEmpty() || element.reference?.resolve() != null) return
+        if (element.referenceName.isEmpty() || TypstLabelResolver.resolveLabels(element.containingFile, element.referenceName).isNotEmpty()) return
         holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "Unresolved Typst label")
             .range(element.textRange)
             .highlightType(ProblemHighlightType.LIKE_UNKNOWN_SYMBOL)
@@ -84,12 +94,9 @@ class TypstDiagnosticsAnnotator : Annotator, DumbAware {
         val pathNode = element.node.findChildByType(E.STRING_LITERAL) ?: return
         val path = pathNode.text.trim('"')
         if (path.isEmpty()) return
-        if (path.startsWith("@")) {
-            holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "Typst package includes are not supported yet")
-                .range(pathNode.psi.textRange)
-                .create()
-            return
-        }
+        // Package catalogs refresh in the background. As with package imports, a missing local
+        // cache entry must not be shown as an error because Typst may fetch the package later.
+        if (path.startsWith("@")) return
         if (TypstModuleFiles.resolveModuleFile(element.containingFile, path) == null) {
             holder.newAnnotation(HighlightSeverity.WEAK_WARNING, "Unresolved Typst include")
                 .range(pathNode.psi.textRange)

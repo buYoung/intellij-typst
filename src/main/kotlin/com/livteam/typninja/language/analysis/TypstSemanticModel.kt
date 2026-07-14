@@ -7,6 +7,7 @@ import com.intellij.psi.util.PsiTreeUtil
 import com.livteam.typninja.language.psi.TypstFieldAccess
 import com.livteam.typninja.language.psi.TypstLetBinding
 import com.livteam.typninja.language.psi.TypstReferenceExpression
+import com.livteam.typninja.language.psi.TypstBindingDeclaration
 import com.livteam.typninja.language.references.TypstBuiltinResolver
 import com.livteam.typninja.language.references.TypstBuiltins
 import com.livteam.typninja.language.psi.TypstElementTypes as E
@@ -33,9 +34,7 @@ object TypstSemanticModel {
         }
         val builtinMetadata = when (val psi = callee.psi) {
             is TypstReferenceExpression -> TypstBuiltins.metadata(psi.referenceName)
-            is TypstFieldAccess -> psi.qualifierName?.let { qualifier ->
-                psi.memberName?.let { member -> TypstBuiltins.moduleMemberMetadata(qualifier, member) }
-            }
+            is TypstFieldAccess -> TypstAnalysis.fieldMetadata(psi)
             else -> null
         }
         builtinMetadata?.let {
@@ -48,6 +47,11 @@ object TypstSemanticModel {
             )
         }
         if (definition?.effectiveKind != TypstDefinitionKind.LET_FUNCTION) return null
+        return callableForDefinition(definition)
+    }
+
+    fun callableForDefinition(definition: TypstDefinition): TypstCallableSignature? {
+        if (definition.effectiveKind != TypstDefinitionKind.LET_FUNCTION) return null
         val declaration = PsiTreeUtil.getParentOfType(
             definition.navigationElement,
             TypstLetBinding::class.java,
@@ -73,28 +77,35 @@ object TypstSemanticModel {
 
     private fun parameterDefinitions(params: ASTNode): List<TypstBuiltins.Parameter> {
         val names = ArrayList<TypstBuiltins.Parameter>()
-        var child = params.firstChildNode
-        while (child != null) {
-            ProgressManager.checkCanceled()
-            when (child.elementType) {
-                T.IDENTIFIER -> names.add(TypstBuiltins.Parameter(child.text))
-                E.NAMED -> child.findChildByType(T.IDENTIFIER)?.let { names.add(TypstBuiltins.Parameter(it.text)) }
-            }
-            child = child.treeNext
-        }
+        collectParameterDefinitions(params, names)
         return names
     }
 
-    private fun parameterNameNode(params: ASTNode, name: String): ASTNode? {
-        var child = params.firstChildNode
+    private fun collectParameterDefinitions(node: ASTNode, output: MutableList<TypstBuiltins.Parameter>) {
+        var child = node.firstChildNode
         while (child != null) {
-            val candidate = when (child.elementType) {
-                T.IDENTIFIER -> child
-                E.NAMED -> child.findChildByType(T.IDENTIFIER)
-                else -> null
+            ProgressManager.checkCanceled()
+            if (child.elementType == E.BINDING_DECLARATION) {
+                (child.psi as? TypstBindingDeclaration)?.name?.let { output.add(TypstBuiltins.Parameter(it)) }
+            } else if (child.elementType == E.DESTRUCTURING || child.elementType == E.NAMED || child.elementType == E.SPREAD) {
+                collectParameterDefinitions(child, output)
             }
-            if (candidate?.text == name) return candidate
             child = child.treeNext
+        }
+    }
+
+    private fun parameterNameNode(params: ASTNode, name: String): ASTNode? {
+        return generateSequence(params.firstChildNode) { nextDepthFirst(it, params) }
+            .firstOrNull { it.elementType == E.BINDING_DECLARATION && (it.psi as? TypstBindingDeclaration)?.name == name }
+            ?.findChildByType(T.IDENTIFIER)
+    }
+
+    private fun nextDepthFirst(node: ASTNode, root: ASTNode): ASTNode? {
+        node.firstChildNode?.let { return it }
+        var current: ASTNode? = node
+        while (current != null && current !== root) {
+            current.treeNext?.let { return it }
+            current = current.treeParent
         }
         return null
     }

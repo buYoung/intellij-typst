@@ -98,9 +98,11 @@ object TypstElementTypes {
     @JvmField val SPREAD: IElementType = TypstElementType("SPREAD")
     @JvmField val DESTRUCTURING: IElementType = TypstElementType("DESTRUCTURING")
     @JvmField val DESTRUCT_ASSIGNMENT: IElementType = TypstElementType("DESTRUCT_ASSIGNMENT")
+    @JvmField val BINDING_DECLARATION: IElementType = TypstElementType("BINDING_DECLARATION")
 
     // ---- math nodes (shallow) ----
     @JvmField val MATH_DELIMITED: IElementType = TypstElementType("MATH_DELIMITED")
+    @JvmField val MATH_REFERENCE: IElementType = TypstElementType("MATH_REFERENCE")
 
     /**
      * Factory used by the parser definition's `createElement`. Most Typst composite nodes map to the
@@ -119,6 +121,8 @@ object TypstElementTypes {
         IMPORT_ITEM -> TypstImportItem(node)
         FIELD_ACCESS -> TypstFieldAccess(node)
         NAMED -> TypstNamedArgument(node)
+        MATH_REFERENCE -> TypstMathIdentifier(node)
+        BINDING_DECLARATION -> TypstBindingDeclaration(node)
         STRING_LITERAL -> TypstStringLiteral(node)
         else -> TypstPsiElement(node)
     }

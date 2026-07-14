@@ -42,6 +42,7 @@ class TypstColorSettingsPage : ColorSettingsPage {
             AttributesDescriptor(MyBundle.message("color.settings.typst.variable"),             TypstTextAttributeKeys.VARIABLE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.parameter"),            TypstTextAttributeKeys.PARAMETER),
             AttributesDescriptor(MyBundle.message("color.settings.typst.named.argument"),       TypstTextAttributeKeys.NAMED_ARGUMENT),
+            AttributesDescriptor(MyBundle.message("color.settings.typst.field"),                TypstTextAttributeKeys.FIELD),
             AttributesDescriptor(MyBundle.message("color.settings.typst.builtin.function"),      TypstTextAttributeKeys.BUILTIN_FUNCTION),
             AttributesDescriptor(MyBundle.message("color.settings.typst.builtin.type"),          TypstTextAttributeKeys.BUILTIN_TYPE),
             AttributesDescriptor(MyBundle.message("color.settings.typst.escape"),          TypstTextAttributeKeys.ESCAPE),
@@ -75,6 +76,7 @@ class TypstColorSettingsPage : ColorSettingsPage {
             "varref" to TypstTextAttributeKeys.VARIABLE,
             "param" to TypstTextAttributeKeys.PARAMETER,
             "namedarg" to TypstTextAttributeKeys.NAMED_ARGUMENT,
+            "field" to TypstTextAttributeKeys.FIELD,
         )
 
         /**
@@ -108,6 +110,7 @@ See @intro and visit https://typst.app for details.
 #let <vardef>numbers</vardef> = (1, 2, 3)
 #let <fndecl>scale</fndecl>(<param>factor</param>) = <param>factor</param> * 2
 #let config = (width: 12pt, ratio: 1.5, flag: true, missing: none, mode: auto)
+#config.<field>width</field>
 
 // Usages resolve to their definitions: a variable read, a function read, a parameter read.
 #(<varref>title</varref>, <fncall>scale</fncall>(2))

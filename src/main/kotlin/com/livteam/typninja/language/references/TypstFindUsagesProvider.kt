@@ -13,13 +13,16 @@ import com.livteam.typninja.language.psi.TypstImportItem
 import com.livteam.typninja.language.psi.TypstLabelDefinition
 import com.livteam.typninja.language.psi.TypstModuleImport
 import com.livteam.typninja.language.psi.TypstTokenTypes
+import com.livteam.typninja.language.psi.TypstBindingDeclaration
+import com.livteam.typninja.language.psi.TypstNamedArgument
+import com.livteam.typninja.language.psi.TypstElementTypes
 
 class TypstFindUsagesProvider : FindUsagesProvider {
 
     override fun getWordsScanner(): WordsScanner =
         DefaultWordsScanner(
             TypstLexer(),
-            TokenSet.create(TypstTokenTypes.IDENTIFIER, TypstTokenTypes.REF_MARKER, TypstTokenTypes.LABEL_DEF),
+            TokenSet.create(TypstTokenTypes.IDENTIFIER, TypstTokenTypes.MATH_IDENT, TypstTokenTypes.REF_MARKER, TypstTokenTypes.LABEL_DEF),
             TokenSet.create(TypstTokenTypes.LINE_COMMENT, TypstTokenTypes.BLOCK_COMMENT),
             TokenSet.create(TypstTokenTypes.STRING, TypstTokenTypes.RAW_TEXT),
             TokenSet.create(TokenType.BAD_CHARACTER),
@@ -29,7 +32,9 @@ class TypstFindUsagesProvider : FindUsagesProvider {
         ownerOf(psiElement) is TypstLetBinding ||
             ownerOf(psiElement) is TypstImportItem ||
             ownerOf(psiElement) is TypstModuleImport ||
-            ownerOf(psiElement) is TypstLabelDefinition
+            ownerOf(psiElement) is TypstLabelDefinition ||
+            ownerOf(psiElement) is TypstBindingDeclaration ||
+            (ownerOf(psiElement) as? TypstNamedArgument)?.node?.treeParent?.elementType == TypstElementTypes.DICT
 
     override fun getHelpId(psiElement: PsiElement): String? = null
 
@@ -43,6 +48,8 @@ class TypstFindUsagesProvider : FindUsagesProvider {
             is TypstImportItem -> "Typst imported name"
             is TypstModuleImport -> "Typst module alias"
             is TypstLabelDefinition -> "Typst label"
+            is TypstBindingDeclaration -> "Typst binding"
+            is TypstNamedArgument -> "Typst dictionary field"
             else -> "Typst symbol"
         }
 

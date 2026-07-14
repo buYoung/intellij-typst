@@ -5,6 +5,7 @@ import com.intellij.formatting.Spacing
 import com.intellij.psi.codeStyle.CodeStyleSettings
 import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.TypstLanguage
+import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstTokenTypes
 
 /**
@@ -50,19 +51,37 @@ class TypstSpacingBuilder(settings: CodeStyleSettings) {
 
         val left: IElementType = child1.node.elementType
         val right: IElementType = child2.node.elementType
+        val parentType = parent.node.elementType
 
         // Comment-group preservation (FDD 9.7): never reflow or merge across a comment.
         if (isComment(left) || isComment(right)) return Spacing.getReadOnlySpacing()
 
-        // Before a closer: preserve (handles trailing commas and author padding); only re-indent.
-        if (isCloser(right)) return structural
+        // Tokens that form one expression never get separated.
+        if (parentType == TypstElementTypes.CODE_EXPRESSION && left == TypstTokenTypes.HASH) return beforeTight
+        if (parentType == TypstElementTypes.FIELD_ACCESS &&
+            (left == TypstTokenTypes.DOT || right == TypstTokenTypes.DOT)
+        ) return beforeTight
+        if (parentType == TypstElementTypes.IMPORT_ITEM &&
+            (left == TypstTokenTypes.DOT || right == TypstTokenTypes.DOT)
+        ) return beforeTight
+        if (parentType == TypstElementTypes.SPREAD && left == TypstTokenTypes.DOT_DOT) return beforeTight
+        if (parentType == TypstElementTypes.UNARY && isUnaryOperator(left)) return beforeTight
+        if (parentType == TypstElementTypes.FUNC_CALL &&
+            (right == TypstElementTypes.ARGS || right == TypstElementTypes.CONTENT_BLOCK)
+        ) return beforeTight
+
+        // Delimiters have no padding on a single line. Existing line breaks are retained.
+        if (isOpener(left) || isCloser(right)) return beforeTight
 
         // Separators.
         if (isSeparator(right)) return beforeTight
         if (isSeparator(left)) return afterSingle
 
-        // Unambiguous binary / comparison / assignment operators get one space on each side.
-        if (isBinaryOperator(left) || isBinaryOperator(right)) return afterSingle
+        // Operators are spaced only inside a parsed binary expression. This avoids changing unary
+        // signs, field access, spreads, markup punctuation and other visually similar tokens.
+        if ((parentType == TypstElementTypes.BINARY || parentType == TypstElementTypes.LET_BINDING) &&
+            (isBinaryOperator(left) || isBinaryOperator(right))
+        ) return afterSingle
 
         return structural
     }
@@ -80,9 +99,17 @@ class TypstSpacingBuilder(settings: CodeStyleSettings) {
             TypstTokenTypes.RBRACKET,
         )
 
-        // Arithmetic (+ - * /), DOT, DOT_DOT and HAT are intentionally excluded: they can be unary,
-        // markup-derived, kebab-identifier, field-access or spread, so spacing them is unsafe.
+        private val OPENERS = setOf(
+            TypstTokenTypes.LPAREN,
+            TypstTokenTypes.LBRACE,
+            TypstTokenTypes.LBRACKET,
+        )
+
         private val BINARY_OPERATORS = setOf(
+            TypstTokenTypes.PLUS,
+            TypstTokenTypes.MINUS,
+            TypstTokenTypes.STAR,
+            TypstTokenTypes.SLASH,
             TypstTokenTypes.EQ,
             TypstTokenTypes.EQ_EQ,
             TypstTokenTypes.EXCL_EQ,
@@ -95,6 +122,16 @@ class TypstSpacingBuilder(settings: CodeStyleSettings) {
             TypstTokenTypes.STAR_EQ,
             TypstTokenTypes.SLASH_EQ,
             TypstTokenTypes.ARROW,
+            TypstTokenTypes.KW_IN,
+            TypstTokenTypes.KW_AND,
+            TypstTokenTypes.KW_OR,
+            TypstTokenTypes.KW_NOT,
+        )
+
+        private val UNARY_OPERATORS = setOf(
+            TypstTokenTypes.PLUS,
+            TypstTokenTypes.MINUS,
+            TypstTokenTypes.KW_NOT,
         )
 
         private val COMMENTS = setOf(
@@ -103,8 +140,10 @@ class TypstSpacingBuilder(settings: CodeStyleSettings) {
         )
 
         private fun isSeparator(type: IElementType): Boolean = type in SEPARATORS
+        private fun isOpener(type: IElementType): Boolean = type in OPENERS
         private fun isCloser(type: IElementType): Boolean = type in CLOSERS
         private fun isBinaryOperator(type: IElementType): Boolean = type in BINARY_OPERATORS
+        private fun isUnaryOperator(type: IElementType): Boolean = type in UNARY_OPERATORS
         private fun isComment(type: IElementType): Boolean = type in COMMENTS
     }
 }

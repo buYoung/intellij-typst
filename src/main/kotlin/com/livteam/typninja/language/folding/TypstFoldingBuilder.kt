@@ -29,6 +29,8 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
     override fun buildFoldRegions(root: PsiElement, document: Document, quick: Boolean): Array<FoldingDescriptor> {
         val descriptors = ArrayList<FoldingDescriptor>()
         collect(root.node, document, descriptors)
+        collectHeadingSections(root.node, document, descriptors)
+        collectImportGroups(root.node, document, descriptors)
         return descriptors.toTypedArray()
     }
 
@@ -47,6 +49,10 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
     override fun getPlaceholderText(node: ASTNode): String = when (node.elementType) {
         TypstElementTypes.CODE_BLOCK -> "{...}"
         TypstElementTypes.CONTENT_BLOCK -> "[...]"
+        TypstElementTypes.HEADING -> " section..."
+        TypstElementTypes.MODULE_IMPORT -> "imports..."
+        TypstTokenTypes.BLOCK_COMMENT -> "/*...*/"
+        TypstTokenTypes.RAW_TEXT -> "`...`"
         in PAREN_GROUPS -> "(...)"
         else -> "..."
     }
@@ -66,6 +72,11 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
         )
 
         private fun isFoldable(node: ASTNode, document: Document): Boolean {
+            if (node.elementType == TypstTokenTypes.BLOCK_COMMENT || node.elementType == TypstTokenTypes.RAW_TEXT) {
+                val range = node.textRange
+                return !range.isEmpty && range.endOffset <= document.textLength &&
+                    document.getLineNumber(range.startOffset) < document.getLineNumber(range.endOffset)
+            }
             val closer = closerFor(node.elementType) ?: return false
             if (!isClosed(node, closer)) return false
             val range = node.textRange
@@ -87,4 +98,61 @@ class TypstFoldingBuilder : FoldingBuilderEx(), DumbAware {
             return c != null && c.elementType == closer
         }
     }
+
+    private fun collectHeadingSections(
+        root: ASTNode,
+        document: Document,
+        output: MutableList<FoldingDescriptor>,
+    ) {
+        val headings = ArrayList<ASTNode>()
+        collectNodes(root, TypstElementTypes.HEADING, headings)
+        for (index in headings.indices) {
+            val heading = headings[index]
+            val level = headingLevel(heading)
+            val startLine = document.getLineNumber(heading.textRange.endOffset.coerceAtMost(document.textLength)) + 1
+            if (startLine >= document.lineCount) continue
+            val startOffset = document.getLineStartOffset(startLine)
+            val nextHeading = headings.drop(index + 1).firstOrNull { headingLevel(it) <= level }
+            val endOffset = nextHeading?.textRange?.startOffset ?: document.textLength
+            if (startOffset < endOffset && document.getLineNumber(startOffset) < document.getLineNumber(endOffset)) {
+                output.add(FoldingDescriptor(heading, com.intellij.openapi.util.TextRange(startOffset, endOffset)))
+            }
+        }
+    }
+
+    private fun collectImportGroups(
+        root: ASTNode,
+        document: Document,
+        output: MutableList<FoldingDescriptor>,
+    ) {
+        val imports = ArrayList<ASTNode>()
+        collectNodes(root, TypstElementTypes.MODULE_IMPORT, imports)
+        var groupStart = 0
+        while (groupStart < imports.size) {
+            var groupEnd = groupStart
+            while (groupEnd + 1 < imports.size) {
+                val gap = document.charsSequence.subSequence(imports[groupEnd].textRange.endOffset, imports[groupEnd + 1].textRange.startOffset)
+                if (gap.any { !it.isWhitespace() }) break
+                groupEnd++
+            }
+            if (groupEnd > groupStart) {
+                val range = com.intellij.openapi.util.TextRange(imports[groupStart].textRange.startOffset, imports[groupEnd].textRange.endOffset)
+                output.add(FoldingDescriptor(imports[groupStart], range))
+            }
+            groupStart = groupEnd + 1
+        }
+    }
+
+    private fun collectNodes(node: ASTNode?, type: IElementType, output: MutableList<ASTNode>) {
+        if (node == null) return
+        if (node.elementType == type) output.add(node)
+        var child = node.firstChildNode
+        while (child != null) {
+            collectNodes(child, type, output)
+            child = child.treeNext
+        }
+    }
+
+    private fun headingLevel(heading: ASTNode): Int =
+        heading.findChildByType(TypstTokenTypes.HEADING_MARKER)?.textLength ?: Int.MAX_VALUE
 }

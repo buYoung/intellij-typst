@@ -13,6 +13,7 @@ import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.openapi.vfs.newvfs.BulkFileListener
 import com.intellij.openapi.vfs.newvfs.events.VFileEvent
+import com.intellij.openapi.application.ApplicationManager
 import com.livteam.typninja.language.references.TypstPackageSpec
 import com.livteam.typninja.settings.TypstSettingsService
 import kotlinx.coroutines.CoroutineScope
@@ -48,6 +49,7 @@ class TypstProjectModelService(
     private val refreshRequested = AtomicBoolean(false)
     private val catalogInitialized = AtomicBoolean(false)
     private val catalogGeneration = AtomicLong()
+    private val listeners = java.util.concurrent.ConcurrentHashMap.newKeySet<(TypstPackageCatalog) -> Unit>()
 
     @Volatile
     private var catalog = TypstPackageCatalog()
@@ -71,6 +73,11 @@ class TypstProjectModelService(
         return catalog
     }
 
+    fun addListener(listener: (TypstPackageCatalog) -> Unit): () -> Unit {
+        listeners.add(listener)
+        return { listeners.remove(listener) }
+    }
+
     override fun getModificationCount(): Long = catalog.generation
 
     fun requestRefresh() {
@@ -87,6 +94,9 @@ class TypstProjectModelService(
                         val publishedCatalog = refreshed.copy(generation = catalogGeneration.incrementAndGet())
                         catalog = publishedCatalog
                         DaemonCodeAnalyzer.getInstance(project).restart()
+                        ApplicationManager.getApplication().invokeLater {
+                            listeners.forEach { listener -> listener(publishedCatalog) }
+                        }
                     }
                 }
             } catch (exception: java.util.concurrent.CancellationException) {
@@ -107,6 +117,7 @@ class TypstProjectModelService(
 
     override fun dispose() {
         refreshJob?.cancel()
+        listeners.clear()
     }
 
     private fun scheduleRefreshIfNeeded() {

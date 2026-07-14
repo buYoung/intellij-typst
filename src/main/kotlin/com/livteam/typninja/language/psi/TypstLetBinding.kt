@@ -3,6 +3,8 @@ package com.livteam.typninja.language.psi
 import com.intellij.lang.ASTNode
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiNameIdentifierOwner
+import com.intellij.psi.search.LocalSearchScope
+import com.intellij.psi.search.SearchScope
 
 /**
  * PSI for a `#let` binding ([TypstElementTypes.LET_BINDING]).
@@ -41,4 +43,11 @@ class TypstLetBinding(node: ASTNode) : TypstPsiElement(node), PsiNameIdentifierO
 
     /** Navigation lands on the bound name (not the leading `let` keyword) when a name exists. */
     override fun getTextOffset(): Int = nameIdentifier?.textOffset ?: super.getTextOffset()
+
+    override fun getUseScope(): SearchScope {
+        var parent = node.treeParent
+        if (parent?.elementType == TypstElementTypes.CODE_EXPRESSION) parent = parent.treeParent
+        if (parent != null && parent !== containingFile.node) return LocalSearchScope(parent.psi)
+        return super.getUseScope()
+    }
 }

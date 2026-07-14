@@ -575,13 +575,21 @@ class TypstParser : PsiParser {
     /** A closure parameter: `name(: default)?` | `..sink` | `_` | nested destructuring. */
     private fun parseParam(builder: PsiBuilder, depth: Int) {
         when (val t = builder.tokenType) {
-            T.DOT_DOT -> parseSpread(builder, depth)
+            T.DOT_DOT -> parseBindingSpread(builder)
             T.LPAREN -> parseDestructuring(builder, depth)
             T.UNDERSCORE -> builder.advanceLexer()
             T.IDENTIFIER ->
-                if (builder.lookAhead(1) == T.COLON) parseNamedOrKeyed(builder, E.NAMED, depth) else builder.advanceLexer()
+                if (builder.lookAhead(1) == T.COLON) parseNamedParameter(builder, depth) else parseBindingName(builder)
             else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth) else consumeErrorToken(builder, "Expected a parameter")
         }
+    }
+
+    private fun parseNamedParameter(builder: PsiBuilder, depth: Int) {
+        val marker = builder.mark()
+        parseBindingName(builder)
+        builder.advanceLexer() // :
+        if (canStartExpr(builder.tokenType)) parseCodeExpr(builder, 0, depth + 1)
+        marker.done(E.NAMED)
     }
 
     /** `( pattern (, pattern)* )` destructuring pattern. */
@@ -592,10 +600,10 @@ class TypstParser : PsiParser {
             while (!builder.eof() && builder.tokenType != T.RPAREN) {
                 val before = builder.rawTokenIndex()
                 when (val t = builder.tokenType) {
-                    T.DOT_DOT -> parseSpread(builder, depth + 1)
+                    T.DOT_DOT -> parseBindingSpread(builder)
                     T.LPAREN -> parseDestructuring(builder, depth + 1)
                     T.IDENTIFIER ->
-                        if (builder.lookAhead(1) == T.COLON) parseNamedOrKeyed(builder, E.NAMED, depth + 1) else builder.advanceLexer()
+                        if (builder.lookAhead(1) == T.COLON) parseNamedParameter(builder, depth + 1) else parseBindingName(builder)
                     T.UNDERSCORE -> builder.advanceLexer()
                     else -> if (canStartExpr(t)) parseCodeExpr(builder, 0, depth + 1) else consumeErrorToken(builder, "Expected a pattern")
                 }
@@ -619,7 +627,7 @@ class TypstParser : PsiParser {
     /** `ident => body` single-parameter closure. */
     private fun parseIdentClosure(builder: PsiBuilder, depth: Int) {
         val marker = builder.mark()
-        builder.advanceLexer() // ident
+        parseBindingName(builder)
         builder.advanceLexer() // =>
         if (canStartExpr(builder.tokenType)) parseCodeExpr(builder, 0, depth + 1)
         marker.done(E.CLOSURE)
@@ -629,9 +637,23 @@ class TypstParser : PsiParser {
     private fun parsePattern(builder: PsiBuilder, depth: Int) {
         when (builder.tokenType) {
             T.LPAREN -> parseDestructuring(builder, depth)
-            T.UNDERSCORE, T.IDENTIFIER -> builder.advanceLexer()
+            T.UNDERSCORE -> builder.advanceLexer()
+            T.IDENTIFIER -> parseBindingName(builder)
             else -> {}
         }
+    }
+
+    private fun parseBindingName(builder: PsiBuilder) {
+        val marker = builder.mark()
+        builder.advanceLexer()
+        marker.done(E.BINDING_DECLARATION)
+    }
+
+    private fun parseBindingSpread(builder: PsiBuilder) {
+        val marker = builder.mark()
+        builder.advanceLexer() // ..
+        if (builder.tokenType == T.IDENTIFIER) parseBindingName(builder)
+        marker.done(E.SPREAD)
     }
 
     // ======================================================================================
@@ -664,6 +686,7 @@ class TypstParser : PsiParser {
                 t == T.LBRACKET -> parseMathDelimited(builder, T.RBRACKET, depth)
                 t == T.STRING -> wrapSingle(builder, E.STRING_LITERAL)
                 t == T.RAW_TEXT -> wrapSingle(builder, E.RAW)
+                t == T.MATH_IDENT -> wrapSingle(builder, E.MATH_REFERENCE)
                 else -> builder.advanceLexer() // math ident / text / operator / attach / align / prime
             }
         }

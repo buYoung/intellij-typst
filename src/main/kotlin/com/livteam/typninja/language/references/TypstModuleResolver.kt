@@ -38,10 +38,8 @@ object TypstModuleResolver {
     fun findExport(moduleFile: TypstFile, name: String): PsiElement? =
         TypstAnalysis.exportedDefinition(moduleFile, name)?.navigationElement
 
-    /** Resolves only the proven exported qualifier; dynamic nested members remain unresolved. */
     fun findImportMember(moduleFile: TypstFile, sourceSegments: List<String>, segmentIndex: Int): PsiElement? {
-        if (segmentIndex != 0) return null
-        return sourceSegments.firstOrNull()?.let { findExport(moduleFile, it) }
+        return TypstAnalysis.exportPathDefinition(moduleFile, sourceSegments, segmentIndex)?.navigationElement
     }
 
     fun resolveImportedName(usageFile: PsiFile, name: String): PsiElement? =

@@ -9,6 +9,7 @@ import com.livteam.typninja.language.psi.TypstFieldAccess
 import com.livteam.typninja.language.psi.TypstLetBinding
 import com.livteam.typninja.language.psi.TypstNamedArgument
 import com.livteam.typninja.language.psi.TypstReferenceExpression
+import com.livteam.typninja.language.psi.TypstMathIdentifier
 import com.livteam.typninja.language.references.TypstBuiltins
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
@@ -35,10 +36,13 @@ object TypstTypeInference {
                 E.CONTENT_BLOCK, E.MARKUP, E.HEADING, E.STRONG, E.EMPH -> "content"
                 E.CLOSURE -> "function"
                 E.NAMED -> namedArgumentType(psi as? TypstNamedArgument)
+                    ?: childAfterColon(node)?.let { typeName(it, visitingElements) }
                 E.REFERENCE_EXPR -> referenceType(psi as? TypstReferenceExpression, visitingElements)
-                E.FIELD_ACCESS -> fieldType(psi as? TypstFieldAccess)
+                E.FIELD_ACCESS -> fieldType(psi as? TypstFieldAccess, visitingElements)
+                E.MATH_REFERENCE -> mathReferenceType(psi as? TypstMathIdentifier)
                 E.FUNC_CALL -> callType(node, visitingElements)
                 E.LET_BINDING -> letType(psi as? TypstLetBinding, visitingElements)
+                E.CODE_BLOCK -> lastTypedChild(node, visitingElements)
                 E.PARENTHESIZED, E.CODE_EXPRESSION, E.UNARY -> firstTypedChild(node, visitingElements)
                 E.BINARY -> firstTypedChild(node, visitingElements)
                 else -> {
@@ -77,19 +81,34 @@ object TypstTypeInference {
         }
     }
 
-    private fun fieldType(fieldAccess: TypstFieldAccess?): String? {
+    private fun fieldType(fieldAccess: TypstFieldAccess?, visitingElements: MutableSet<PsiElement>): String? {
         fieldAccess ?: return null
-        val moduleMetadata = fieldAccess.qualifierName?.let { module ->
-            fieldAccess.memberName?.let { member -> TypstBuiltins.moduleMemberMetadata(module, member) }
+        val memberMetadata = TypstAnalysis.fieldMetadata(fieldAccess)
+        if (memberMetadata != null) {
+            return if (memberMetadata.kind == TypstBuiltins.Kind.FUNCTION) "function" else memberMetadata.returnType
         }
-        if (moduleMetadata != null) {
-            return if (moduleMetadata.kind == TypstBuiltins.Kind.FUNCTION) "function" else moduleMetadata.returnType
-        }
+        TypstAnalysis.fieldValueElement(fieldAccess)?.let { typeName(it.node, visitingElements) }?.let { return it }
         return when (TypstAnalysis.resolveField(fieldAccess)?.effectiveKind) {
             TypstDefinitionKind.LET_FUNCTION, TypstDefinitionKind.BUILTIN_FUNCTION -> "function"
             TypstDefinitionKind.BUILTIN_TYPE -> "type"
             TypstDefinitionKind.BUILTIN_MODULE, TypstDefinitionKind.MODULE_ALIAS -> "module"
             else -> null
+        }
+    }
+
+    private fun mathReferenceType(identifier: TypstMathIdentifier?): String? {
+        identifier ?: return null
+        val definition = TypstAnalysis.resolveMath(identifier)?.definition ?: return null
+        return when (definition.effectiveKind) {
+            TypstDefinitionKind.LET_FUNCTION, TypstDefinitionKind.BUILTIN_FUNCTION -> "function"
+            TypstDefinitionKind.BUILTIN_TYPE -> "type"
+            TypstDefinitionKind.BUILTIN_MODULE, TypstDefinitionKind.MODULE_ALIAS -> "module"
+            TypstDefinitionKind.BUILTIN_VALUE -> "symbol"
+            TypstDefinitionKind.LET_VARIABLE,
+            TypstDefinitionKind.PARAMETER,
+            TypstDefinitionKind.LOOP_BINDING,
+            TypstDefinitionKind.IMPORTED_SYMBOL -> null
+            TypstDefinitionKind.LABEL -> "label"
         }
     }
 
@@ -133,11 +152,31 @@ object TypstTypeInference {
         return null
     }
 
+    private fun childAfterColon(node: ASTNode): ASTNode? {
+        var child = node.firstChildNode
+        var sawColon = false
+        while (child != null) {
+            if (child.elementType == T.COLON) sawColon = true
+            else if (sawColon && !isSkippable(child)) return child
+            child = child.treeNext
+        }
+        return null
+    }
+
     private fun firstTypedChild(node: ASTNode, visitingElements: MutableSet<PsiElement>): String? {
         var child = node.firstChildNode
         while (child != null) {
             if (!isSkippable(child)) typeName(child, visitingElements)?.let { return it }
             child = child.treeNext
+        }
+        return null
+    }
+
+    private fun lastTypedChild(node: ASTNode, visitingElements: MutableSet<PsiElement>): String? {
+        var child = node.lastChildNode
+        while (child != null) {
+            if (!isSkippable(child)) typeName(child, visitingElements)?.let { return it }
+            child = child.treePrev
         }
         return null
     }

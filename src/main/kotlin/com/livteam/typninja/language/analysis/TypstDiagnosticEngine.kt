@@ -18,16 +18,19 @@ data class TypstNativeDiagnostic(
     val severity: HighlightSeverity,
     val message: String,
     val category: TypstDiagnosticCategory,
+    val fix: TypstDiagnosticFix? = null,
 )
+
+data class TypstDiagnosticFix(val text: String, val range: TextRange, val replacement: String)
 
 /** Cached, conservative diagnostics that do not guess dynamic Typst evaluation results. */
 object TypstDiagnosticEngine {
     fun diagnosticsFor(element: PsiElement): List<TypstNativeDiagnostic> {
         val file = element.containingFile as? TypstFile ?: return emptyList()
         val snapshot = CachedValuesManager.getCachedValue(file) {
-            CachedValueProvider.Result.create(compute(file), file)
+            CachedValueProvider.Result.create(compute(file).groupBy(TypstNativeDiagnostic::range), file)
         }
-        return snapshot.filter { it.range == element.textRange }
+        return snapshot[element.textRange].orEmpty()
     }
 
     private fun compute(file: TypstFile): List<TypstNativeDiagnostic> {
@@ -60,14 +63,23 @@ object TypstDiagnosticEngine {
 
     private fun duplicateParameters(params: ASTNode, diagnostics: MutableList<TypstNativeDiagnostic>) {
         val names = HashSet<String>()
-        var child = params.firstChildNode
+        collectParameterNames(params).forEach { nameNode ->
+            if (!names.add(nameNode.text)) diagnostics.add(semantic(nameNode, "Duplicate parameter `${nameNode.text}`"))
+        }
+    }
+
+    private fun collectParameterNames(root: ASTNode): List<ASTNode> {
+        val result = ArrayList<ASTNode>()
+        var child = root.firstChildNode
         while (child != null) {
             ProgressManager.checkCanceled()
-            if (child.elementType == T.IDENTIFIER && !names.add(child.text)) {
-                diagnostics.add(semantic(child, "Duplicate parameter `${child.text}`"))
+            when (child.elementType) {
+                E.BINDING_DECLARATION -> child.findChildByType(T.IDENTIFIER)?.let(result::add)
+                E.NAMED, E.SPREAD, E.DESTRUCTURING -> result.addAll(collectParameterNames(child))
             }
             child = child.treeNext
         }
+        return result
     }
 
     private fun callDiagnostics(call: ASTNode, diagnostics: MutableList<TypstNativeDiagnostic>) {
@@ -83,7 +95,17 @@ object TypstDiagnosticEngine {
                     val name = child.findChildByType(T.IDENTIFIER)?.text ?: ""
                     if (name.isNotEmpty() && !named.add(name)) diagnostics.add(semantic(child, "Duplicate named argument `$name`"))
                     if (name.isNotEmpty() && signature.isParameterListComplete && signature.parameters.none { it.name == name }) {
-                        diagnostics.add(semantic(child, "Unknown named argument `$name`"))
+                        val nameNode = child.findChildByType(T.IDENTIFIER) ?: child
+                        val suggestion = signature.parameters.asSequence()
+                            .map { it.name }
+                            .map { candidate -> candidate to editDistance(name, candidate) }
+                            .minByOrNull { it.second }
+                            ?.takeIf { it.second <= maxOf(2, name.length / 3) }
+                            ?.first
+                        val fix = suggestion?.let {
+                            TypstDiagnosticFix("Replace with `$it`", nameNode.textRange, it)
+                        }
+                        diagnostics.add(semantic(nameNode, "Unknown named argument `$name`", fix))
                     }
                 }
                 T.LPAREN, T.RPAREN, T.COMMA, com.intellij.psi.TokenType.WHITE_SPACE, T.LINE_COMMENT, T.BLOCK_COMMENT, T.PARBREAK -> Unit
@@ -116,9 +138,26 @@ object TypstDiagnosticEngine {
         return false
     }
 
-    private fun semantic(node: ASTNode, message: String) =
-        TypstNativeDiagnostic(node.textRange, HighlightSeverity.WEAK_WARNING, message, TypstDiagnosticCategory.SEMANTIC)
+    private fun semantic(node: ASTNode, message: String, fix: TypstDiagnosticFix? = null) =
+        TypstNativeDiagnostic(node.textRange, HighlightSeverity.WEAK_WARNING, message, TypstDiagnosticCategory.SEMANTIC, fix)
 
     private fun lint(node: ASTNode, message: String) =
         TypstNativeDiagnostic(node.textRange, HighlightSeverity.WARNING, message, TypstDiagnosticCategory.LINT)
+
+    private fun editDistance(left: String, right: String): Int {
+        if (left == right) return 0
+        if (left.isEmpty()) return right.length
+        if (right.isEmpty()) return left.length
+        var previous = IntArray(right.length + 1) { it }
+        for (leftIndex in left.indices) {
+            val current = IntArray(right.length + 1)
+            current[0] = leftIndex + 1
+            for (rightIndex in right.indices) {
+                val substitution = previous[rightIndex] + if (left[leftIndex] == right[rightIndex]) 0 else 1
+                current[rightIndex + 1] = minOf(current[rightIndex] + 1, previous[rightIndex + 1] + 1, substitution)
+            }
+            previous = current
+        }
+        return previous[right.length]
+    }
 }

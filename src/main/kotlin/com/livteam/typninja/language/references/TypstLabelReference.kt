@@ -2,7 +2,9 @@ package com.livteam.typninja.language.references
 
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
-import com.intellij.psi.PsiReferenceBase
+import com.intellij.psi.PsiPolyVariantReferenceBase
+import com.intellij.psi.ResolveResult
+import com.intellij.psi.PsiElementResolveResult
 import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.psi.TypstLabelDefinition
 import com.intellij.psi.util.PsiTreeUtil
@@ -17,18 +19,22 @@ import com.intellij.psi.util.PsiTreeUtil
  * `null`, which the platform surfaces without navigating anywhere false.
  */
 class TypstLabelReference(element: TypstRef, rangeInElement: TextRange) :
-    PsiReferenceBase<TypstRef>(element, rangeInElement) {
+    PsiPolyVariantReferenceBase<TypstRef>(element, rangeInElement) {
 
-    override fun resolve(): PsiElement? =
-        TypstLabelResolver.resolveLabel(element.containingFile, element.referenceName)
+    override fun multiResolve(incompleteCode: Boolean): Array<ResolveResult> =
+        TypstLabelResolver.resolveLabels(element.containingFile, element.referenceName)
+            .map(::PsiElementResolveResult)
+            .toTypedArray()
 
     override fun getVariants(): Array<Any> = emptyArray()
 
     override fun isReferenceTo(element: PsiElement): Boolean {
-        val resolved = resolve() ?: return false
-        if (resolved.manager.areElementsEquivalent(resolved, element)) return true
-        val owner = PsiTreeUtil.getParentOfType(resolved, TypstLabelDefinition::class.java, false)
-        return owner != null && owner.manager.areElementsEquivalent(owner, element)
+        return multiResolve(false).any { result ->
+            val resolved = result.element ?: return@any false
+            if (resolved.manager.areElementsEquivalent(resolved, element)) return@any true
+            val owner = PsiTreeUtil.getParentOfType(resolved, TypstLabelDefinition::class.java, false)
+            owner != null && owner.manager.areElementsEquivalent(owner, element)
+        }
     }
 
     override fun handleElementRename(newElementName: String): PsiElement = element.renamed(newElementName)

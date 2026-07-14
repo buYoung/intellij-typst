@@ -19,14 +19,15 @@ class TypstPreviewAction : AnAction() {
         val document = file?.let { FileDocumentManager.getInstance().getDocument(it) }
         event.presentation.isEnabledAndVisible = project != null &&
             file?.fileType == TypstFileType &&
-            document != null && !FileDocumentManager.getInstance().isDocumentUnsaved(document) &&
+            document != null &&
             TypstToolchainService.getInstance(project).currentCapability().isValid
     }
 
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val file = event.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        TypstPreviewService.getInstance(project).preview(file)
+        val currentText = FileDocumentManager.getInstance().getDocument(file)?.text
+        TypstPreviewService.getInstance(project).preview(file, currentText)
         ToolWindowManager.getInstance(project).getToolWindow("Typst Preview")?.show()
     }
 }

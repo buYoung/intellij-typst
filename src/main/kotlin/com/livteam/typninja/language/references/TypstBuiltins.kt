@@ -49,7 +49,7 @@ object TypstBuiltins {
         "sub", "super", "smallcaps", "upper", "lower", "smartquote", "linebreak", "lorem",
         "counter", "state", "query", "locate", "here", "metadata", "assert", "eval", "panic",
         "repr", "target", "plugin", "read", "csv", "json", "toml", "yaml", "xml", "cbor",
-        "rgb", "luma", "cmyk", "oklab", "oklch", "linear-rgb", "hsv",
+        "rgb", "luma", "cmyk", "oklab", "oklch", "linear-rgb", "hsv", "hsl", "entry", "spot",
     )
 
     /** Built-in types (usable as values, e.g. `type(x) == int`). */
@@ -245,16 +245,91 @@ object TypstBuiltins {
         )
     }
 
-    /** Conservative 0.15 module members used by all native code-insight consumers. */
+    private fun functionMembers(vararg names: String): List<Metadata> = names.map { name ->
+        Metadata(
+            name = name,
+            kind = Kind.FUNCTION,
+            signature = "$name(..)",
+            summary = "Typst standard-library function.",
+        )
+    }
+
+    /** Typst 0.15 module members shared by navigation, completion, documentation and diagnostics. */
     private val MODULE_MEMBERS: Map<String, List<Metadata>> = mapOf(
-        "calc" to listOf(
-            Metadata("abs", Kind.FUNCTION, "abs(value)", listOf(Parameter("value", true)), "Returns the absolute value."),
-            Metadata("ceil", Kind.FUNCTION, "ceil(value)", listOf(Parameter("value", true)), "Rounds up."),
-            Metadata("floor", Kind.FUNCTION, "floor(value)", listOf(Parameter("value", true)), "Rounds down."),
-            Metadata("min", Kind.FUNCTION, "min(..values)", listOf(Parameter("values", true)), "Returns the smallest value."),
-            Metadata("max", Kind.FUNCTION, "max(..values)", listOf(Parameter("values", true)), "Returns the largest value."),
-            Metadata("pow", Kind.FUNCTION, "pow(base, exponent)", listOf(Parameter("base", true), Parameter("exponent", true)), "Raises a value to a power."),
+        "calc" to functionMembers(
+            "abs", "acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "binom", "ceil",
+            "clamp", "cos", "cosh", "div-euclid", "erf", "even", "exp", "fact", "floor", "fract",
+            "gcd", "lcm", "ln", "log", "max", "min", "norm", "odd", "perm", "pow", "quo", "rem",
+            "rem-euclid", "root", "round", "sin", "sinh", "sqrt", "tan", "tanh", "trunc",
         ),
+        "sys" to listOf(
+            Metadata("version", Kind.VALUE, summary = "The running Typst version.", returnType = "version"),
+            Metadata("inputs", Kind.VALUE, summary = "Values supplied to the Typst compiler.", returnType = "dictionary"),
+        ),
+        "pdf" to functionMembers("artifact", "attach"),
+        "html" to functionMembers("elem", "frame", "scripter", "typed"),
+        "math" to functionMembers(
+            "abs", "accent", "attach", "binom", "cancel", "cases", "class", "equation", "floor", "frac",
+            "lr", "mat", "mid", "norm", "op", "overbrace", "overline", "overshell", "pad", "primes",
+            "root", "round", "scripts", "serif", "sqrt", "stretch", "underbrace", "underline", "undershell",
+            "vec",
+        ),
+    )
+
+    /**
+     * Members available on values of a known Typst type. The list mirrors the Typst 0.15 scope
+     * inventory bundled with Tinymist. Keeping it here lets IntelliJ answer `value.member` without
+     * starting a language server or a compiler process.
+     */
+    private val TYPE_MEMBERS: Map<String, List<Metadata>> = mapOf(
+        "arguments" to functionMembers("at", "filter", "len", "map", "named", "pos"),
+        "assert" to functionMembers("eq", "ne"),
+        "array" to functionMembers(
+            "all", "any", "at", "chunks", "contains", "dedup", "enumerate", "filter", "find", "first",
+            "flatten", "fold", "insert", "intersperse", "join", "last", "len", "map", "pop", "position",
+            "product", "push", "range", "reduce", "remove", "rev", "slice", "sorted", "split", "sum",
+            "to-dict", "windows", "zip",
+        ),
+        "bytes" to functionMembers("at", "len", "slice"),
+        "content" to functionMembers("at", "fields", "func", "has", "location"),
+        "datetime" to functionMembers("day", "display", "hour", "minute", "month", "ordinal", "second", "today", "weekday", "year"),
+        "dictionary" to functionMembers("at", "filter", "insert", "keys", "len", "map", "pairs", "remove", "values"),
+        "duration" to functionMembers("days", "hours", "minutes", "seconds", "weeks"),
+        "float" to functionMembers("from-bytes", "is-infinite", "is-nan", "signum", "to-bytes"),
+        "function" to functionMembers("where", "with"),
+        "int" to functionMembers("bit-and", "bit-lshift", "bit-not", "bit-or", "bit-rshift", "bit-xor", "from-bytes", "signum", "to-bytes"),
+        "plugin" to functionMembers("transition"),
+        "selector" to functionMembers("after", "and", "before", "or", "within"),
+        "str" to functionMembers(
+            "at", "clusters", "codepoints", "contains", "ends-with", "find", "first", "from-unicode", "last",
+            "len", "match", "matches", "normalize", "position", "replace", "rev", "slice", "split",
+            "starts-with", "to-unicode", "trim",
+        ),
+        "version" to functionMembers("at"),
+        "counter" to functionMembers("at", "display", "final", "get", "step", "update"),
+        "location" to functionMembers("page", "page-numbering", "position"),
+        "state" to functionMembers("at", "final", "get", "update"),
+        "alignment" to functionMembers("axis", "inv"),
+        "angle" to functionMembers("deg", "rad"),
+        "direction" to functionMembers("axis", "end", "from", "inv", "sign", "start", "to"),
+        "grid" to functionMembers("cell", "footer", "header", "hline", "vline"),
+        "length" to functionMembers("cm", "inches", "mm", "pt", "to-absolute"),
+        "place" to functionMembers("flush"),
+        "table" to functionMembers("cell", "footer", "header", "hline", "vline"),
+        "color" to functionMembers(
+            "cmyk", "components", "darken", "desaturate", "hsl", "hsv", "lighten", "linear-rgb", "luma",
+            "mix", "negate", "oklab", "oklch", "opacify", "rgb", "rotate", "saturate", "space", "spot",
+            "to-hex", "transparentize",
+        ),
+        "curve" to functionMembers("close", "cubic", "line", "move", "quad"),
+        "gradient" to functionMembers(
+            "angle", "center", "conic", "focal-center", "focal-radius", "kind", "linear", "radial", "radius",
+            "relative", "repeat", "sample", "samples", "sharp", "space", "stops",
+        ),
+        "json" to functionMembers("encode"),
+        "toml" to functionMembers("encode"),
+        "yaml" to functionMembers("encode"),
+        "cbor" to functionMembers("encode"),
     )
 
     private val METADATA: Map<String, Metadata> = FUNCTION_METADATA + TYPE_METADATA + MODULE_METADATA + VALUE_METADATA
@@ -267,14 +342,91 @@ object TypstBuiltins {
     fun metadata(name: String): Metadata? = METADATA[name]
 
     fun moduleMemberMetadata(moduleName: String, memberName: String): Metadata? =
-        MODULE_MEMBERS[moduleName]?.firstOrNull { it.name == memberName }
+        if (moduleName == "sym" || moduleName == "emoji") TypstSymbols.metadata(moduleName, memberName)
+        else if (moduleName == "std") METADATA[memberName]
+        else MODULE_MEMBERS[moduleName]?.firstOrNull { it.name == memberName }
 
-    fun moduleMembers(moduleName: String): List<Metadata> = MODULE_MEMBERS[moduleName].orEmpty()
+    fun moduleMembers(moduleName: String): List<Metadata> =
+        if (moduleName == "sym" || moduleName == "emoji") TypstSymbols.members(moduleName)
+        else if (moduleName == "std") METADATA.values.filterNot { it.name == "std" }.sortedBy(Metadata::name)
+        else MODULE_MEMBERS[moduleName].orEmpty()
 
-    fun allStubNames(): Set<String> = ALL + MODULE_MEMBERS.values.flatten().map(Metadata::name)
+    fun dottedMemberMetadata(ownerPath: String, memberName: String): Metadata? =
+        TypstSymbols.metadata(ownerPath, memberName)
+
+    fun dottedMembers(ownerPath: String): List<Metadata> = TypstSymbols.members(ownerPath)
+
+    fun mathMetadata(name: String): Metadata? =
+        moduleMemberMetadata("math", name) ?: TypstSymbols.metadata("sym", name)
+
+    fun mathMembers(): List<Metadata> = buildList {
+        addAll(moduleMembers("math"))
+        addAll(TypstSymbols.members("sym"))
+    }.distinctBy(Metadata::name).sortedBy(Metadata::name)
+
+    fun typeMemberMetadata(typeName: String, memberName: String): Metadata? =
+        TYPE_MEMBERS[typeName]?.firstOrNull { it.name == memberName }
+            ?.let { metadata -> metadata.copy(returnType = metadata.returnType ?: memberReturnType(typeName, memberName)) }
+
+    fun typeMembers(typeName: String): List<Metadata> = TYPE_MEMBERS[typeName].orEmpty().map { metadata ->
+        metadata.copy(returnType = metadata.returnType ?: memberReturnType(typeName, metadata.name))
+    }
+
+    fun memberMetadata(ownerName: String, memberName: String): Metadata? =
+        moduleMemberMetadata(ownerName, memberName) ?: typeMemberMetadata(ownerName, memberName)
+
+    fun allStubNames(): Set<String> = ALL + MODULE_MEMBERS.values.flatten().map(Metadata::name) +
+        TYPE_MEMBERS.values.flatten().map(Metadata::name) + TypstSymbols.allNames()
 
     fun stubMetadata(name: String): Metadata? = METADATA[name]
         ?: MODULE_MEMBERS.values.asSequence().flatten().firstOrNull { it.name == name }
+        ?: TYPE_MEMBERS.values.asSequence().flatten().firstOrNull { it.name == name }
+        ?: TypstSymbols.anyMetadata(name)
 
     fun allMetadata(): Collection<Metadata> = METADATA.values
+
+    private fun memberReturnType(typeName: String, memberName: String): String? = when {
+        memberName == "len" -> "int"
+        memberName in setOf("all", "any", "contains", "ends-with", "is-infinite", "is-nan", "starts-with") -> "bool"
+        typeName == "function" && memberName == "with" -> "function"
+        typeName == "str" && memberName in setOf("first", "last", "normalize", "replace", "rev", "slice", "trim") -> "str"
+        typeName == "str" && memberName in setOf("clusters", "codepoints", "matches", "split", "to-unicode") -> "array"
+        typeName == "str" && memberName in setOf("find", "match") -> "dictionary"
+        typeName == "array" && memberName in setOf("chunks", "dedup", "enumerate", "filter", "flatten", "intersperse", "map", "range", "rev", "slice", "sorted", "split", "windows", "zip") -> "array"
+        typeName == "dictionary" && memberName in setOf("filter", "map") -> "dictionary"
+        typeName == "dictionary" && memberName in setOf("keys", "pairs", "values") -> "array"
+        typeName == "bytes" && memberName == "slice" -> "bytes"
+        typeName == "content" && memberName in setOf("at", "location") -> if (memberName == "location") "location" else "content"
+        typeName == "content" && memberName == "fields" -> "dictionary"
+        typeName == "content" && memberName == "func" -> "function"
+        typeName == "content" && memberName == "has" -> "bool"
+        typeName == "datetime" && memberName == "display" -> "str"
+        typeName == "datetime" && memberName != "today" -> "int"
+        typeName == "datetime" && memberName == "today" -> "datetime"
+        typeName == "duration" -> "float"
+        typeName == "float" && memberName == "to-bytes" -> "bytes"
+        typeName == "float" && memberName == "from-bytes" -> "float"
+        typeName == "int" && memberName == "to-bytes" -> "bytes"
+        typeName == "int" && memberName == "from-bytes" -> "int"
+        typeName == "selector" -> "selector"
+        typeName == "counter" && memberName == "display" -> "content"
+        typeName == "counter" && memberName in setOf("at", "final", "get") -> "array"
+        typeName == "counter" -> "counter"
+        typeName == "location" && memberName in setOf("page", "position") -> if (memberName == "page") "int" else "dictionary"
+        typeName == "state" && memberName in setOf("at", "final", "get") -> null
+        typeName == "state" -> "state"
+        typeName == "alignment" && memberName == "inv" -> "alignment"
+        typeName == "angle" -> "float"
+        typeName == "direction" && memberName in setOf("from", "inv") -> "direction"
+        typeName == "direction" && memberName == "axis" -> "str"
+        typeName == "direction" && memberName in setOf("end", "sign", "start", "to") -> "float"
+        typeName == "length" -> "float"
+        typeName == "color" && memberName in setOf("components") -> "array"
+        typeName == "color" && memberName in setOf("space", "to-hex") -> "str"
+        typeName == "color" -> "color"
+        typeName == "gradient" && memberName == "sample" -> "color"
+        typeName == "gradient" && memberName in setOf("samples", "stops") -> "array"
+        typeName == "gradient" -> "gradient"
+        else -> null
+    }
 }

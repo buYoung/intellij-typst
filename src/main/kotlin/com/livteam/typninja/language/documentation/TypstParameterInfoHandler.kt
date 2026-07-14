@@ -31,7 +31,17 @@ class TypstParameterInfoHandler : ParameterInfoHandler<PsiElement, TypstCallable
     }
 
     override fun updateUI(parameter: TypstCallableSignature, context: ParameterInfoUIContext) {
-        context.setupUIComponentPresentation(parameter.presentation, 0, parameter.presentation.length, false, false, false, context.defaultParameterColor)
+        val parameterIndex = context.currentParameterIndex
+        val range = parameterRange(parameter, parameterIndex)
+        context.setupUIComponentPresentation(
+            parameter.presentation,
+            range?.first ?: -1,
+            range?.last?.plus(1) ?: -1,
+            false,
+            false,
+            false,
+            context.defaultParameterColor,
+        )
     }
 
     private fun findCallAt(file: PsiElement, offset: Int): PsiElement? {
@@ -46,14 +56,27 @@ class TypstParameterInfoHandler : ParameterInfoHandler<PsiElement, TypstCallable
 
     private fun argumentIndex(call: ASTNode, offset: Int): Int {
         val args = call.findChildByType(E.ARGS) ?: return 0
+        val signature = TypstSemanticModel.callableForCall(call)
         var index = 0
         var child = args.firstChildNode
         while (child != null) {
+            if (child.textRange.containsOffset(offset) && child.elementType == E.NAMED) {
+                val name = child.findChildByType(T.IDENTIFIER)?.text
+                val namedIndex = signature?.parameters?.indexOfFirst { it.name == name } ?: -1
+                if (namedIndex >= 0) return namedIndex
+            }
             if (child.startOffset >= offset) return index
             if (child.elementType == T.COMMA) index++
             child = child.treeNext
         }
         return index
+    }
+
+    private fun parameterRange(signature: TypstCallableSignature, index: Int): IntRange? {
+        if (index !in signature.parameters.indices) return null
+        var start = signature.name.length + 1
+        for (parameterIndex in 0 until index) start += signature.parameters[parameterIndex].name.length + 2
+        return start until start + signature.parameters[index].name.length
     }
 
 }

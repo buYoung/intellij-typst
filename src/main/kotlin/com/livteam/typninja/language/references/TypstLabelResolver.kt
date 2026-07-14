@@ -5,6 +5,8 @@ import com.intellij.openapi.progress.ProgressManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiFile
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
+import com.livteam.typninja.language.analysis.TypstProjectLabels
+import com.livteam.typninja.language.analysis.TypstProjectBibliography
 
 /**
  * File-local resolution between a `@reference` and its `<label>` definition.
@@ -27,9 +29,22 @@ object TypstLabelResolver {
 
     /** The [T.LABEL_DEF] leaf in [file] whose inner name equals [name], or `null` if none defines it. */
     fun resolveLabel(file: PsiFile, name: String): PsiElement? {
-        if (name.isEmpty()) return null
-        val root = file.node ?: return null
-        return findLabel(root, name)?.psi
+        return resolveLabels(file, name).singleOrNull()
+    }
+
+    fun resolveLabels(file: PsiFile, name: String): List<PsiElement> {
+        if (name.isEmpty()) return emptyList()
+        val root = file.node ?: return emptyList()
+        val local = findLabel(root, name)?.psi
+        val definitions = ArrayList<PsiElement>()
+        if (local != null) definitions.add(local)
+        TypstProjectLabels.definitions(file.project, name).forEach { candidate ->
+            if (definitions.none { it.manager.areElementsEquivalent(it, candidate) }) definitions.add(candidate)
+        }
+        TypstProjectBibliography.definitions(file.project, name).forEach { candidate ->
+            if (definitions.none { it.manager.areElementsEquivalent(it, candidate) }) definitions.add(candidate)
+        }
+        return definitions
     }
 
     private fun findLabel(node: ASTNode, name: String): ASTNode? {

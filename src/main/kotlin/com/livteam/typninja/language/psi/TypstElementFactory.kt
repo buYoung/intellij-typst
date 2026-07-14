@@ -33,6 +33,13 @@ object TypstElementFactory {
             ?: throw IncorrectOperationException("Cannot create Typst reference: $name")
     }
 
+    fun createMathIdentifier(project: Project, name: String): TypstMathIdentifier {
+        requireIdentifier(name)
+        val file = createFile(project, "$ $name $")
+        return PsiTreeUtil.findChildOfType(file, TypstMathIdentifier::class.java)
+            ?: throw IncorrectOperationException("Cannot create Typst math identifier: $name")
+    }
+
     fun createImportItem(project: Project, sourceName: String, localName: String): TypstImportItem {
         val sourceSegments = sourceName.split('.')
         if (sourceSegments.isEmpty() || sourceSegments.any { !isIdentifier(it) }) {

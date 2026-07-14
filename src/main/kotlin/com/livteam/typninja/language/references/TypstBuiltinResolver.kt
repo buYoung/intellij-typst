@@ -24,7 +24,7 @@ import com.livteam.typninja.language.psi.TypstReferenceExpression
 object TypstBuiltinResolver {
 
     /** Resolve [name] to its stub `#let` declaration, or `null` when it is not a known builtin. */
-    fun resolve(usage: TypstReferenceExpression, name: String): PsiElement? {
+    fun resolve(usage: PsiElement, name: String): PsiElement? {
         return resolve(usage.project, name)
     }
 

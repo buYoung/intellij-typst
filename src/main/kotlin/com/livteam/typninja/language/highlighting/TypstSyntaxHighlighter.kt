@@ -139,6 +139,12 @@ object TypstTextAttributeKeys {
         "TYPST_NAMED_ARGUMENT", DefaultLanguageHighlighterColors.PARAMETER
     )
 
+    /** Field or dictionary member (`value.member`). */
+    @JvmField
+    val FIELD: TextAttributesKey = createTextAttributesKey(
+        "TYPST_FIELD", DefaultLanguageHighlighterColors.INSTANCE_FIELD
+    )
+
     /**
      * A Typst standard-library builtin FUNCTION used as a value (`image`, `table`, …) — mirrors
      * tinymist's `support.function.builtin` scope. Distinct from a user [FUNCTION_CALL] so stdlib names

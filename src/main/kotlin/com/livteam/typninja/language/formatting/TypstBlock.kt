@@ -113,7 +113,10 @@ class TypstBlock(
         private val CODE_WRAPPERS: Set<IElementType> = setOf(
             TypstElementTypes.CODE_EXPRESSION,
             TypstElementTypes.FUNC_CALL,
+            TypstElementTypes.FIELD_ACCESS,
             TypstElementTypes.CLOSURE,
+            TypstElementTypes.UNARY,
+            TypstElementTypes.BINARY,
             TypstElementTypes.LET_BINDING,
             TypstElementTypes.SET_RULE,
             TypstElementTypes.SHOW_RULE,
@@ -123,11 +126,16 @@ class TypstBlock(
             TypstElementTypes.FOR_LOOP,
             TypstElementTypes.MODULE_IMPORT,
             TypstElementTypes.IMPORT_ITEMS,
+            TypstElementTypes.IMPORT_ITEM,
             TypstElementTypes.MODULE_INCLUDE,
             TypstElementTypes.LOOP_BREAK,
             TypstElementTypes.LOOP_CONTINUE,
             TypstElementTypes.FUNC_RETURN,
             TypstElementTypes.DESTRUCT_ASSIGNMENT,
+            TypstElementTypes.NAMED,
+            TypstElementTypes.KEYED,
+            TypstElementTypes.SPREAD,
+            TypstElementTypes.BINDING_DECLARATION,
         )
 
         private fun computeKind(node: ASTNode): Kind {
@@ -148,8 +156,8 @@ class TypstBlock(
                 type == TypstElementTypes.CODE_BLOCK ->
                     if (isClosed(node, TypstTokenTypes.RBRACE)) Kind.CODE_CONTAINER else Kind.LEAF
 
-                // Markup prose, atomic expressions, binary/unary/field-access wrappers, token leaves
-                // and error elements are all preserved verbatim (conservative formatting).
+                // Markup prose, atomic expressions, token leaves and error elements are preserved
+                // verbatim. Code wrappers above recurse so punctuation can be spaced by context.
                 else -> Kind.LEAF
             }
         }

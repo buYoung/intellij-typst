@@ -4,13 +4,22 @@ import com.intellij.lang.ASTNode
 import com.intellij.openapi.util.TextRange
 import com.intellij.psi.PsiElement
 import com.intellij.psi.PsiReference
+import com.intellij.psi.PsiNameIdentifierOwner
 import com.livteam.typninja.language.references.TypstNamedArgumentReference
 
 /** A named call argument such as `align: center`. */
-class TypstNamedArgument(node: ASTNode) : TypstPsiElement(node) {
+class TypstNamedArgument(node: ASTNode) : TypstPsiElement(node), PsiNameIdentifierOwner {
 
     val argumentName: String?
         get() = nameNode()?.text
+
+    override fun getNameIdentifier(): PsiElement? = nameNode()?.psi
+
+    override fun getName(): String? = argumentName
+
+    override fun setName(name: String): PsiElement = replaceArgumentName(name)
+
+    override fun getTextOffset(): Int = nameIdentifier?.textOffset ?: super.getTextOffset()
 
     override fun getReference(): PsiReference? {
         if (node.treeParent?.elementType != TypstElementTypes.ARGS) return null

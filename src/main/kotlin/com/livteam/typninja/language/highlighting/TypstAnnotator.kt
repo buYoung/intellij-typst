@@ -11,10 +11,14 @@ import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
 import com.intellij.psi.tree.IElementType
 import com.livteam.typninja.language.analysis.TypstDefinitionKind
+import com.livteam.typninja.language.analysis.TypstAnalysis
+import com.livteam.typninja.language.psi.TypstFieldAccess
+import com.livteam.typninja.language.psi.TypstMathIdentifier
 import com.livteam.typninja.language.psi.TypstElementTypes
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.psi.TypstTokenTypes
 import com.livteam.typninja.language.references.TypstReferenceResolver
+import com.livteam.typninja.settings.TypstSettingsService
 
 /**
  * PSI-driven highlighting annotator for Typst (FDD 9.2 contextual modifiers + semantic colors).
@@ -41,6 +45,8 @@ class TypstAnnotator : Annotator, DumbAware {
         keyFor(node.elementType)?.let { key ->
             apply(holder, element.textRange, key)
         }
+        val settings = TypstSettingsService.getInstance(element.project).state
+        if (settings.syntaxOnlyMode || !settings.enableSemanticHighlighting) return
         // Semantic colors target a specific identifier range inside the node.
         for ((range, key) in semanticHighlights(node)) {
             apply(holder, range, key)
@@ -78,9 +84,45 @@ class TypstAnnotator : Annotator, DumbAware {
                 TypstElementTypes.PARAMS -> paramHighlights(node)
                 TypstElementTypes.CLOSURE -> closureParamHighlight(node)
                 TypstElementTypes.NAMED -> namedArgumentHighlight(node)
+                TypstElementTypes.BINDING_DECLARATION -> bindingDeclarationHighlight(node)
                 TypstElementTypes.REFERENCE_EXPR -> referenceUsageHighlight(node)
+                TypstElementTypes.FIELD_ACCESS -> fieldAccessHighlight(node)
+                TypstElementTypes.MATH_REFERENCE -> mathReferenceHighlight(node)
                 else -> emptyList()
             }
+
+        private fun fieldAccessHighlight(fieldAccess: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
+            val field = fieldAccess.psi as? TypstFieldAccess ?: return emptyList()
+            val member = lastDirectIdentifier(fieldAccess) ?: return emptyList()
+            val parent = fieldAccess.treeParent
+            if (parent?.elementType == TypstElementTypes.FUNC_CALL && firstMeaningfulChild(parent) === fieldAccess) {
+                // The enclosing call owns its callee color. Highlighting here too would create
+                // competing annotations for the same method name.
+                return emptyList()
+            }
+            val metadata = TypstAnalysis.fieldMetadata(field)
+            val definition = TypstAnalysis.resolveField(field)
+            val key = when {
+                metadata?.kind == com.livteam.typninja.language.references.TypstBuiltins.Kind.FUNCTION ->
+                    TypstTextAttributeKeys.BUILTIN_FUNCTION
+                definition != null -> keyForDefinitionKind(definition.effectiveKind) ?: TypstTextAttributeKeys.FIELD
+                else -> TypstTextAttributeKeys.FIELD
+            }
+            return listOf(member.textRange to key)
+        }
+
+        private fun mathReferenceHighlight(mathReference: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
+            val identifier = mathReference.psi as? TypstMathIdentifier ?: return emptyList()
+            val definition = TypstAnalysis.resolveMath(identifier)?.definition ?: return emptyList()
+            val name = firstDirectChildOfType(mathReference, TypstTokenTypes.MATH_IDENT) ?: return emptyList()
+            val key = when (definition.effectiveKind) {
+                TypstDefinitionKind.BUILTIN_FUNCTION, TypstDefinitionKind.LET_FUNCTION -> TypstTextAttributeKeys.FUNCTION_CALL
+                TypstDefinitionKind.LET_VARIABLE -> TypstTextAttributeKeys.VARIABLE
+                TypstDefinitionKind.PARAMETER, TypstDefinitionKind.LOOP_BINDING -> TypstTextAttributeKeys.PARAMETER
+                else -> TypstTextAttributeKeys.MATH_IDENT
+            }
+            return listOf(name.textRange to key)
+        }
 
         /**
          * A whole heading line ([TypstElementTypes.HEADING]) — marker AND title text. The lexer only
@@ -155,18 +197,7 @@ class TypstAnnotator : Annotator, DumbAware {
          */
         private fun paramHighlights(params: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
             val out = ArrayList<Pair<TextRange, TextAttributesKey>>()
-            var child = params.firstChildNode
-            while (child != null) {
-                when (child.elementType) {
-                    TypstTokenTypes.IDENTIFIER ->
-                        out.add(child.textRange to TypstTextAttributeKeys.PARAMETER)
-                    TypstElementTypes.NAMED ->
-                        firstDirectChildOfType(child, TypstTokenTypes.IDENTIFIER)?.let {
-                            out.add(it.textRange to TypstTextAttributeKeys.PARAMETER)
-                        }
-                }
-                child = child.treeNext
-            }
+            collectBindingHighlights(params, TypstTextAttributeKeys.PARAMETER, out)
             return out
         }
 
@@ -177,10 +208,49 @@ class TypstAnnotator : Annotator, DumbAware {
          */
         private fun closureParamHighlight(closure: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
             val first = firstMeaningfulChild(closure) ?: return emptyList()
-            return if (first.elementType == TypstTokenTypes.IDENTIFIER) {
-                listOf(first.textRange to TypstTextAttributeKeys.PARAMETER)
+            return if (first.elementType == TypstElementTypes.BINDING_DECLARATION) {
+                firstDirectChildOfType(first, TypstTokenTypes.IDENTIFIER)
+                    ?.let { listOf(it.textRange to TypstTextAttributeKeys.PARAMETER) }
+                    .orEmpty()
             } else {
                 emptyList()
+            }
+        }
+
+        private fun bindingDeclarationHighlight(binding: ASTNode): List<Pair<TextRange, TextAttributesKey>> {
+            val identifier = firstDirectChildOfType(binding, TypstTokenTypes.IDENTIFIER) ?: return emptyList()
+            var parent = binding.treeParent
+            while (parent != null) {
+                when (parent.elementType) {
+                    TypstElementTypes.PARAMS,
+                    TypstElementTypes.CLOSURE,
+                    TypstElementTypes.FOR_LOOP ->
+                        return listOf(identifier.textRange to TypstTextAttributeKeys.PARAMETER)
+                    TypstElementTypes.LET_BINDING ->
+                        return listOf(identifier.textRange to TypstTextAttributeKeys.VARIABLE_DEFINITION)
+                }
+                parent = parent.treeParent
+            }
+            return emptyList()
+        }
+
+        private fun collectBindingHighlights(
+            node: ASTNode,
+            key: TextAttributesKey,
+            output: MutableList<Pair<TextRange, TextAttributesKey>>,
+        ) {
+            var child = node.firstChildNode
+            while (child != null) {
+                if (child.elementType == TypstElementTypes.BINDING_DECLARATION) {
+                    firstDirectChildOfType(child, TypstTokenTypes.IDENTIFIER)?.let { output.add(it.textRange to key) }
+                } else if (
+                    child.elementType == TypstElementTypes.NAMED ||
+                    child.elementType == TypstElementTypes.DESTRUCTURING ||
+                    child.elementType == TypstElementTypes.SPREAD
+                ) {
+                    collectBindingHighlights(child, key, output)
+                }
+                child = child.treeNext
             }
         }
 

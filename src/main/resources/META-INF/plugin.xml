@@ -29,6 +29,10 @@
     <!-- Language and file type registrations -->
     <extensions defaultExtensionNs="com.intellij">
         <notificationGroup id="Typst" displayType="BALLOON" isLogByDefault="true"/>
+        <postStartupActivity implementation="com.livteam.typninja.preview.TypstAutoCompileStartupActivity"/>
+        <statusBarWidgetFactory id="com.livteam.typninja.status"
+                                implementation="com.livteam.typninja.preview.TypstStatusBarWidgetFactory"
+                                order="last"/>
         <fileType name="Typst"
                   implementationClass="com.livteam.typninja.language.TypstFileType"
                   fieldName="INSTANCE"
@@ -51,6 +55,10 @@
         <toolWindow id="Typst Preview"
                     anchor="right"
                     factoryClass="com.livteam.typninja.preview.TypstPreviewToolWindowFactory"/>
+        <toolWindow id="Typst"
+                    anchor="left"
+                    secondary="true"
+                    factoryClass="com.livteam.typninja.language.editor.TypstWorkspaceToolWindowFactory"/>
         <lang.formatter language="Typst"
                         implementationClass="com.livteam.typninja.language.formatting.TypstFormattingModelBuilder"/>
         <lang.commenter language="Typst"
@@ -63,11 +71,14 @@
                              implementationClass="com.livteam.typninja.language.folding.TypstFoldingBuilder"/>
         <lang.findUsagesProvider language="Typst"
                                  implementationClass="com.livteam.typninja.language.references.TypstFindUsagesProvider"/>
+        <usageTypeProvider implementation="com.livteam.typninja.language.references.TypstUsageTypeProvider"/>
         <lang.refactoringSupport language="Typst"
                                  implementationClass="com.livteam.typninja.language.references.TypstRefactoringSupportProvider"/>
         <typeDeclarationProvider implementation="com.livteam.typninja.language.references.TypstTypeDeclarationProvider"/>
         <completion.contributor language="Typst"
                                 implementationClass="com.livteam.typninja.language.completion.TypstCompletionContributor"/>
+        <psi.referenceContributor language="Typst"
+                                  implementation="com.livteam.typninja.language.editor.TypstLinkReferenceContributor"/>
         <lang.documentationProvider language="Typst"
                                     implementationClass="com.livteam.typninja.language.documentation.TypstDocumentationProvider"/>
         <codeInsight.parameterInfo language="Typst"
@@ -75,10 +86,16 @@
         <lang.psiStructureViewFactory language="Typst"
                                       implementationClass="com.livteam.typninja.language.structure.TypstStructureViewFactory"/>
         <fileBasedIndex implementation="com.livteam.typninja.language.analysis.TypstExportedSymbolIndex"/>
+        <fileBasedIndex implementation="com.livteam.typninja.language.analysis.TypstLabelIndex"/>
+        <fileBasedIndex implementation="com.livteam.typninja.language.analysis.TypstBibliographyIndex"/>
         <gotoSymbolContributor implementation="com.livteam.typninja.language.structure.TypstSymbolContributor"/>
         <highlightUsagesHandlerFactory implementationClass="com.livteam.typninja.language.editor.TypstHighlightUsagesHandlerFactory"/>
+        <runLineMarkerContributor language="Typst"
+                                  implementationClass="com.livteam.typninja.language.editor.TypstRunLineMarkerContributor"/>
         <extendWordSelectionHandler implementationClass="com.livteam.typninja.language.editor.TypstWordSelectionHandler"
                                     order="first"/>
+        <lang.surroundDescriptor language="Typst"
+                                 implementationClass="com.livteam.typninja.language.editor.TypstSurroundDescriptor"/>
         <colorProvider implementationClass="com.livteam.typninja.language.editor.TypstColorProvider"/>
         <codeInsight.declarativeInlayProvider language="Typst"
                                               providerId="typst.parameters"
@@ -86,10 +103,33 @@
                                               nameKey="inlay.typst.parameters.name"
                                               descriptionKey="inlay.typst.parameters.description"
                                               implementationClass="com.livteam.typninja.language.editor.TypstInlayHintsProvider"/>
+        <codeInsight.declarativeInlayProvider language="Typst"
+                                              providerId="typst.package.version"
+                                              bundle="messages.MyBundle"
+                                              nameKey="inlay.typst.package.version.name"
+                                              descriptionKey="inlay.typst.package.version.description"
+                                              implementationClass="com.livteam.typninja.language.editor.TypstPackageVersionInlayHintsProvider"/>
         <enterHandlerDelegate implementation="com.livteam.typninja.language.actions.TypstEnterHandler"/>
+        <typedHandler implementation="com.livteam.typninja.language.editor.TypstTypedHandler"/>
+        <fileDropHandler implementation="com.livteam.typninja.language.editor.TypstResourceDropHandler"/>
         <intentionAction>
             <language>Typst</language>
             <className>com.livteam.typninja.language.actions.TypstIncreaseHeadingLevelIntention</className>
+            <category>Typst</category>
+        </intentionAction>
+        <intentionAction>
+            <language>Typst</language>
+            <className>com.livteam.typninja.language.actions.TypstDecreaseHeadingLevelIntention</className>
+            <category>Typst</category>
+        </intentionAction>
+        <intentionAction>
+            <language>Typst</language>
+            <className>com.livteam.typninja.language.actions.TypstConvertMathToBlockIntention</className>
+            <category>Typst</category>
+        </intentionAction>
+        <intentionAction>
+            <language>Typst</language>
+            <className>com.livteam.typninja.language.actions.TypstConvertMathToInlineIntention</className>
             <category>Typst</category>
         </intentionAction>
     </extensions>
