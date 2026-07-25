@@ -46,16 +46,18 @@ class TypstToolchainService(
     fun currentCapability(): TypstToolchainCapability = capability
 
     fun requestValidation() {
-        val executablePath = TypstSettingsService.getInstance(project).state.typstExecutablePath.orEmpty().trim()
+        val settings = TypstSettingsService.getInstance(project)
+        val executablePath = TypstExecutableResolver.resolve(project, settings.state.typstExecutablePath.orEmpty())
         val generation = validationGeneration.incrementAndGet()
         validationJob?.cancel()
-        if (executablePath.isEmpty()) {
-            capability = TypstToolchainCapability(failureMessage = "Typst executable is not configured")
+        if (executablePath == null) {
+            capability = TypstToolchainCapability(failureMessage = "Typst executable was not found automatically")
             return
         }
         validationJob = coroutineScope.launch {
             val validated = validate(executablePath)
-            val currentPath = TypstSettingsService.getInstance(project).state.typstExecutablePath.orEmpty().trim()
+            val currentSettings = TypstSettingsService.getInstance(project)
+            val currentPath = TypstExecutableResolver.resolve(project, currentSettings.state.typstExecutablePath.orEmpty())
             if (validationGeneration.get() == generation && currentPath == executablePath) {
                 capability = validated
             }
@@ -72,9 +74,6 @@ class TypstToolchainService(
                 })
             }
             val version = VERSION_PATTERN.find(versionResult.output)?.groupValues?.get(1)
-            if (version?.startsWith("0.15.") != true) {
-                return@withContext TypstToolchainCapability(executablePath, version, false, "Typst 0.15 is required")
-            }
             val helpResult = runCommand(GeneralCommandLine(executablePath).withParameters("compile", "--help"))
             if (helpResult.exitCode != 0 || !helpResult.output.contains("--format") || !helpResult.output.contains("--root") ||
                 !helpResult.output.contains("--ppi") || !helpResult.output.contains("png")) {

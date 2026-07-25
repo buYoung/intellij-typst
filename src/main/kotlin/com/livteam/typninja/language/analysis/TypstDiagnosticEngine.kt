@@ -113,8 +113,11 @@ object TypstDiagnosticEngine {
             }
             child = child.treeNext
         }
+        val hasTrailingContent = call.findChildByType(E.CONTENT_BLOCK) != null
         signature.parameters.filter { it.isRequired }.forEachIndexed { index, parameter ->
-            if (parameter.name !in named && index >= positionalCount) {
+            val isSuppliedByTrailingContent = hasTrailingContent &&
+                (parameter.name == "body" || parameter.typeName == "content")
+            if (parameter.name !in named && index >= positionalCount && !isSuppliedByTrailingContent) {
                 diagnostics.add(semantic(call, "Required argument `${parameter.name}` is missing"))
             }
         }

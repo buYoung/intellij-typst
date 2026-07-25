@@ -240,6 +240,28 @@ class TypstLexer : LexerBase(), RestartableLexer {
         pop()
     }
 
+    /**
+     * A markup `#if`/`#for`/`#let` expression may finish with a code block. Once that block is
+     * complete, return to markup before a surrounding content closer or following prose. Keep the
+     * statement open only for `else`, a postfix tail, or an operator that continues the expression.
+     */
+    private fun endStmtAfterCodeBlock() {
+        if (topFrame() != F_HASH_STMT) return
+        var index = currentTokenEnd
+        while (index < bufferEndOffset && (buffer[index] == ' ' || buffer[index] == '\t')) index++
+        if (index >= bufferEndOffset) return
+        val next = buffer[index]
+        if (next == '\n' || next == '\r') return
+        if (isIdentStart(next)) {
+            val word = peekWord(index)
+            if (word == "else" || word == "and" || word == "or" || word == "in") return
+        }
+        if (next == '.' && index + 1 < bufferEndOffset && isIdentStart(buffer[index + 1])) return
+        if (next == '(' || next == '[' || next == '+' || next == '-' ||
+            next == '*' || next == '/' || next == '=' || next == '!' || next == '<' || next == '>' || next == ';') return
+        pop()
+    }
+
     // ---- scanning ----
 
     private fun scanToken() {
@@ -464,7 +486,12 @@ class TypstLexer : LexerBase(), RestartableLexer {
             c == '(' -> { emit(TypstTokenTypes.LPAREN, position + 1); push(F_PAREN) }
             c == ')' -> { emit(TypstTokenTypes.RPAREN, position + 1); popIfTop(F_PAREN); endAtomicIfNoTail() }
             c == '{' -> { emit(TypstTokenTypes.LBRACE, position + 1); push(F_BRACE) }
-            c == '}' -> { emit(TypstTokenTypes.RBRACE, position + 1); popIfTop(F_BRACE); endAtomicIfNoTail() }
+            c == '}' -> {
+                emit(TypstTokenTypes.RBRACE, position + 1)
+                popIfTop(F_BRACE)
+                endAtomicIfNoTail()
+                endStmtAfterCodeBlock()
+            }
             c == '[' -> { emit(TypstTokenTypes.LBRACKET, position + 1); push(F_CONTENT) }
             c == ']' -> { emit(TypstTokenTypes.RBRACKET, position + 1); popIfTop(F_CONTENT); endAtomicIfNoTail() }
             c == '$' -> { emit(TypstTokenTypes.DOLLAR, position + 1); push(F_MATH) }

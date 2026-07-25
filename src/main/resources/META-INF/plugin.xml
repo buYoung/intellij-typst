@@ -138,13 +138,13 @@
         <action id="com.livteam.typninja.preview"
                 class="com.livteam.typninja.language.actions.TypstPreviewAction"
                 text="Preview Typst"
-                description="Compile the saved Typst file with the configured Typst executable">
+                description="Compile the current Typst file with the detected or configured Typst executable">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
         <action id="com.livteam.typninja.export"
                 class="com.livteam.typninja.language.actions.TypstExportAction"
                 text="Export Typst"
-                description="Export the saved Typst file with the configured Typst executable">
+                description="Export the current Typst file with the detected or configured Typst executable">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

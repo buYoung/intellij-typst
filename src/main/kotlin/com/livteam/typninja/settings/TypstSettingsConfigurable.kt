@@ -160,7 +160,9 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         private val ufcsLeftCheckBox = JBCheckBox("Place arguments before content")
         private val ufcsRightCheckBox = JBCheckBox("Place content as the first argument")
 
-        private val executablePathField = JBTextField()
+        private val executablePathField = JBTextField().apply {
+            emptyText.text = "Detected automatically when empty"
+        }
         private val systemFontsCheckBox = JBCheckBox("Use system fonts")
         private val fontPathsField = JBTextField()
         private val extraArgumentsField = JBTextField()
