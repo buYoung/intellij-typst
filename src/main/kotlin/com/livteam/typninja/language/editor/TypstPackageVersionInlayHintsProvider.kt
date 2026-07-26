@@ -15,6 +15,8 @@ import com.livteam.typninja.language.psi.TypstFile
 import com.livteam.typninja.language.psi.TypstModuleImport
 import com.livteam.typninja.language.references.TypstPackageResolver
 import com.livteam.typninja.settings.TypstSettingsService
+import com.livteam.typninja.runtime.TypstPackageStatus
+import com.livteam.typninja.runtime.TypstRuntimeService
 
 class TypstPackageVersionInlayHintsProvider : InlayHintsProvider {
     override fun createCollector(file: PsiFile, editor: Editor): InlayHintsCollector? {
@@ -35,11 +37,18 @@ private object TypstPackageVersionInlayHintsCollector : SharedBypassCollector {
             .filter { it.namespace == requested.namespace && it.name == requested.name }
         val exactInstalled = installed.any { it.version == requested.version }
         val newest = installed.maxWithOrNull(compareByVersion())
-        val message = when {
+        val runtimeStatus = TypstRuntimeService.getInstance(element.project).packageStatus(specification)
+        val message = when (runtimeStatus) {
+            TypstPackageStatus.DOWNLOADING -> "downloading"
+            TypstPackageStatus.FAILED -> "download failed"
+            TypstPackageStatus.AVAILABLE_REMOTELY -> "available remotely"
+            TypstPackageStatus.INSTALLED -> "installed"
+            null -> when {
             exactInstalled && newest != null && compareVersions(newest.version, requested.version) > 0 -> "installed · ${newest.version} available"
             exactInstalled -> "installed"
             newest != null -> "not installed · ${newest.version} is available locally"
             else -> "not installed"
+            }
         }
         sink.addPresentation(
             InlineInlayPosition(moduleImport.textRange.endOffset, true, 0),

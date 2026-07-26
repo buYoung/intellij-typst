@@ -1,4 +1,5 @@
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -38,5 +39,18 @@ intellijPlatform {
         ides {
             recommended()
         }
+    }
+}
+
+val localTypstRuntimeExecutable = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
+    "typst-runtime.exe"
+} else {
+    "typst-runtime"
+}
+val localTypstRuntimePath = layout.projectDirectory.file("renderer/target/debug/$localTypstRuntimeExecutable")
+
+tasks.named<RunIdeTask>("runIde") {
+    if (System.getenv("TYPST_RUNTIME_PATH").isNullOrBlank()) {
+        environment("TYPST_RUNTIME_PATH", localTypstRuntimePath.asFile.absolutePath)
     }
 }

@@ -542,6 +542,22 @@ class TypstLexer : LexerBase(), RestartableLexer {
     }
 
     private fun scanNumber() {
+        if (position + 2 < bufferEndOffset && buffer[position] == '0') {
+            val base = when (buffer[position + 1]) {
+                'b', 'B' -> 2
+                'o', 'O' -> 8
+                'x', 'X' -> 16
+                else -> 0
+            }
+            if (base != 0) {
+                var baseEnd = position + 2
+                while (baseEnd < bufferEndOffset && digitValue(buffer[baseEnd]) in 0 until base) baseEnd++
+                if (baseEnd > position + 2) {
+                    emit(TypstTokenTypes.INTEGER_LITERAL, baseEnd)
+                    return
+                }
+            }
+        }
         var end = position
         while (end < bufferEndOffset && isDigit(buffer[end])) end++
         var isFloat = false
@@ -606,7 +622,7 @@ class TypstLexer : LexerBase(), RestartableLexer {
                 emit(TypstTokenTypes.MATH_PRIMES, end)
             }
             c == '"' -> scanString()
-            c == '\\' -> scanCodeEscape()
+            c == '\\' -> scanMathEscape()
             isMathShorthandStart(c) -> scanMathShorthand(c)
             isIdentStart(c) -> {
                 var end = position
@@ -614,6 +630,15 @@ class TypstLexer : LexerBase(), RestartableLexer {
                 emit(TypstTokenTypes.MATH_IDENT, end)
             }
             else -> emit(TypstTokenTypes.MATH_TEXT, position + 1) // digits / symbols; never BAD_CHARACTER noise
+        }
+    }
+
+    private fun scanMathEscape() {
+        val next = peek(1)
+        if (next == ' ' || next == '\n' || next == '\r' || next == '\t') {
+            emit(TypstTokenTypes.LINEBREAK, position + 1)
+        } else {
+            emit(TypstTokenTypes.ESCAPE, position + 2)
         }
     }
 
@@ -678,6 +703,13 @@ class TypstLexer : LexerBase(), RestartableLexer {
         c == ' ' || c == '\t' || c == '\r' || c == '\n' || c == FORM_FEED
 
     private fun isDigit(c: Char): Boolean = c in '0'..'9'
+
+    private fun digitValue(c: Char): Int = when (c) {
+        in '0'..'9' -> c - '0'
+        in 'a'..'f' -> c - 'a' + 10
+        in 'A'..'F' -> c - 'A' + 10
+        else -> -1
+    }
 
     /**
      * Mirrors typst's `in_word()` gate for markup emphasis toggles. The scan cursor [position] points

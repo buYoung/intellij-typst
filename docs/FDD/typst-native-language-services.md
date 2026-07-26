@@ -4,12 +4,13 @@ profile: full
 feature-name: typst-native-language-services
 status: active
 created: 2026-06-30
-last-verified: 2026-06-30
-verified-against: ff0cd7e
+last-verified: 2026-07-25
+verified-against: 46ee8ce
 tags: [typst, language-services, language-intelligence, psi, native-intellij]
 related:
   - docs/FDD/typst-syntax-highlighting.md
   - docs/FDD/typst-formatting.md
+  - docs/FDD/typst-runtime-services.md
 purpose: Source of design decisions, not implementation actions
 agent-readable: true
 not:
@@ -24,7 +25,7 @@ not:
 
 이 문서는 Typst 파일을 IntelliJ 기반 IDE 안에서 편집할 때 제공할 네이티브 언어 지능 기능의 의사결정 출처다.
 
-사용자 요청의 `lsp` 범위는 Language Server Protocol 구현이 아니라, IDE 사용자가 기대하는 Typst 언어 지능으로 해석한다. 이 기능은 외부 언어 서버, JSON-RPC 통신, IntelliJ 플랫폼의 실험적 LSP 계층을 사용하지 않는다.
+사용자 요청의 `lsp` 범위는 Language Server Protocol 구현이 아니라, IDE 사용자가 기대하는 Typst 언어 지능으로 해석한다. 네이티브 PSI 언어 지능은 외부 언어 서버나 IntelliJ 플랫폼의 실험적 LSP 계층을 사용하지 않는다. 컴파일 진단, 패키지 확보, 미리보기는 이 기능을 대체하지 않는 별도 런타임 서비스가 담당한다.
 
 구현 순서, 클래스 배치, 파일별 작업 계획은 이 문서의 범위가 아니며, 별도 구현 계획에서 파생되어야 한다.
 
@@ -70,7 +71,7 @@ Typst Native Language Services is the native IntelliJ language-intelligence laye
 - 사용자가 문서를 작성할 때 기본 심볼 탐색, 참조 해석, 오류 표시, 자동완성을 받을 수 있게 한다.
 - 문맥별 자동완성, 진단, 정의 이동, 참조, 문서화, 문서 구조, 패키지 및 import 보조를 하나의 일관된 언어 경험으로 묶는다.
 - 구문 강조와 포매터가 같은 Typst 토큰 및 구문 개념을 공유하도록 한다.
-- 외부 프로세스 없이 동작하여 설치, 성능, 오프라인 사용성을 단순하게 유지한다.
+- 기본 PSI 언어 지능은 외부 프로세스 없이 동작하여 설치와 오프라인 사용성을 유지한다.
 
 ### Non-Goals
 
@@ -121,6 +122,7 @@ Typst Native Language Services is the native IntelliJ language-intelligence laye
 | 초기 플러그인 템플릿 | Typst 언어 기능이 들어갈 빈 플러그인 골격으로 사용된다. |
 | Typst Syntax Highlighting | 같은 파일 타입과 문법 모델을 사용하며, 언어 인식의 첫 사용자 가시 기능이다. |
 | Typst Formatting | 같은 구문 트리를 사용해 문서 구조 기반 정렬과 간격 정책을 적용한다. |
+| Typst Runtime Services | 네이티브 PSI 기능을 대체하지 않고 실제 컴파일 진단, 패키지 확보, 미리보기를 보완한다. |
 
 ---
 
@@ -199,16 +201,19 @@ Typst Native Language Services is the native IntelliJ language-intelligence laye
 
 ### 9.1 네이티브 우선 정책
 
+`외부 프로세스를 전혀 사용하지 않는다`는 초기 정책은 [superseded 2026-07-25 — see Revision History] 상태다.
+
 Decision:
 
 - Typst 언어 서비스는 IntelliJ 네이티브 언어 API를 기준으로 설계한다.
-- Language Server Protocol 서버 실행, JSON-RPC 통신, IntelliJ 플랫폼 LSP 계층, `tinymist` 의존은 현재 범위에서 제외한다.
+- Language Server Protocol 서버 실행, IntelliJ 플랫폼 LSP 계층, `tinymist` 실행 파일과 프로토콜 의존은 현재 범위에서 제외한다.
+- 컴파일 진단, 패키지 확보, 렌더링은 네이티브 PSI를 대체하지 않는 별도 프로젝트 런타임으로 보완할 수 있다.
 
 Rationale:
 
 - 사용자가 명시적으로 `tinymist`를 사용하지 않겠다고 정했다.
 - 네이티브 파이프라인은 구문 강조, 포매터, 참조, 자동완성, 리팩터링을 같은 문법 모델 위에서 통합할 수 있다.
-- 외부 프로세스 의존을 제거하면 설치와 오프라인 사용성이 단순해진다.
+- 네이티브 PSI 기능을 독립적으로 유지하면 런타임이 없거나 오프라인이어도 기본 편집 기능이 계속 동작한다.
 
 ### 9.2 부분 지원 정책
 
@@ -261,6 +266,8 @@ Rationale:
 
 ### 9.6 패키지와 import 오프라인 우선 정책
 
+`@preview` 원격 패키지를 현재 범위에서 제외한다는 결정은 [superseded 2026-07-25 — see Revision History] 상태다.
+
 Decision:
 
 - v1은 로컬 프로젝트와 이미 확인 가능한 로컬 패키지 정보만 언어 서비스 대상으로 삼는다.
@@ -305,13 +312,13 @@ Why not chosen:
 
 ### 11.1 Security
 
-- 외부 프로세스를 실행하지 않으며, Typst 소스 분석은 IDE 프로세스 안에서 프로젝트 파일을 읽는 범위로 제한한다.
-- 원격 패키지 조회나 임의 명령 실행은 현재 범위에 포함하지 않는다.
+- 네이티브 PSI 분석은 IDE 프로세스 안에서 프로젝트 파일을 읽는 범위로 제한한다.
+- 외부 런타임과 원격 패키지의 보안 경계는 관련 FDD에서 별도로 정의한다.
 
 ### 11.2 Privacy
 
-- 문서 내용은 기본적으로 로컬 IDE 안에서만 분석된다.
-- 네트워크 전송이나 원격 분석은 현재 범위에 포함하지 않는다.
+- 네이티브 PSI 분석 자체는 문서 내용을 네트워크로 전송하지 않는다.
+- 별도 런타임의 패키지 메타데이터 요청은 관련 FDD의 개인 정보 정책을 따른다.
 
 ### 11.3 Permissions
 
@@ -414,7 +421,15 @@ Why not chosen:
 - 수식 문맥의 의미 자동완성
 - 문서 구조 보기와 빠른 탐색
 - 리팩터링, 이름 변경, 사용처 찾기
-- Typst 렌더링 및 미리보기 기능과의 통합
+- 네이티브 PSI 결과와 컴파일 스냅샷 사이의 더 정밀한 의미 연결
+
+---
+
+## Revision History
+
+| Date | Type | Summary |
+| ---- | ---- | ------- |
+| 2026-07-25 | superseded | 외부 런타임과 원격 패키지를 전면 제외하던 초기 정책을 네이티브 PSI 독립성 정책으로 좁히고, 컴파일·패키지·미리보기 보조 기능을 별도 FDD로 분리했다. |
 
 ---
 
@@ -431,4 +446,4 @@ Why not chosen:
 | -------------- | ----------------------------------------- |
 | 플러그인 식별자와 기본 의존성 | `src/main/resources/META-INF/plugin.xml` |
 | 플랫폼 버전 선택 | `build.gradle.kts` |
-| 템플릿 서비스 예시 | `src/main/kotlin/com/livteam/typninja/services/` |
+| 네이티브 언어 분석 | `src/main/kotlin/com/livteam/typninja/language/analysis/` |

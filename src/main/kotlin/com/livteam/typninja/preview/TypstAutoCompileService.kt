@@ -14,6 +14,7 @@ import com.intellij.openapi.startup.ProjectActivity
 import com.intellij.openapi.vfs.VirtualFile
 import com.livteam.typninja.language.TypstFileType
 import com.livteam.typninja.settings.TypstSettingsService
+import com.livteam.typninja.runtime.TypstRuntimeService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -51,19 +52,30 @@ class TypstAutoCompileService(
         val file = FileDocumentManager.getInstance().getFile(document) ?: return
         if (file.fileType != TypstFileType || !belongsToProject(file)) return
         val settings = TypstSettingsService.getInstance(project).state
-        if (settings.autoPreview != trigger && settings.autoExport != trigger) return
+        val needsCompilation = settings.autoPreview == trigger ||
+            settings.autoExport == trigger ||
+            settings.compilerDiagnosticsTrigger.orEmpty().ifBlank { "onSave" } == trigger
+        val packages = PREVIEW_PACKAGE_PATTERN.findAll(document.text).map { it.value }.toSet()
+        if (!needsCompilation && packages.isEmpty()) return
         typingJob?.cancel()
         typingJob = coroutineScope.launch {
-            if (!immediately) delay(450)
-            runConfiguredTasks(file, document.text, trigger)
+            if (!immediately) delay(500)
+            packages.forEach(TypstRuntimeService.getInstance(project)::ensurePreviewPackage)
+            runConfiguredTasks(file, document.text, document.modificationStamp, trigger)
         }
     }
 
-    private fun runConfiguredTasks(file: VirtualFile, currentText: String, trigger: String) {
+    private fun runConfiguredTasks(file: VirtualFile, currentText: String, documentVersion: Long, trigger: String) {
         val settingsService = TypstSettingsService.getInstance(project)
         val settings = settingsService.state
         val previewService = TypstPreviewService.getInstance(project)
-        if (settings.autoPreview == trigger) previewService.preview(file, currentText)
+        if (settings.compilerDiagnosticsTrigger.orEmpty().ifBlank { "onSave" } == trigger &&
+            settings.autoPreview != trigger
+        ) {
+            TypstRuntimeService.getInstance(project)
+                .requestCompile(file, currentText, render = false, documentVersion = documentVersion)
+        }
+        if (settings.autoPreview == trigger) previewService.preview(file, currentText, documentVersion)
         if (settings.autoExport == trigger) {
             val sourcePath = Path.of(file.path).toAbsolutePath().normalize()
             val entrypoint = settingsService.mainFile(sourcePath)
@@ -81,6 +93,10 @@ class TypstAutoCompileService(
 
     override fun dispose() {
         typingJob?.cancel()
+    }
+
+    private companion object {
+        val PREVIEW_PACKAGE_PATTERN = Regex("@preview/[A-Za-z0-9_-]+:[0-9A-Za-z.+_-]+")
     }
 }
 

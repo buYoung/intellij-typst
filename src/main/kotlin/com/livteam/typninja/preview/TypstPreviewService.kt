@@ -12,6 +12,7 @@ import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.openapi.vfs.VirtualFile
 import com.livteam.typninja.execution.TypstToolchainService
 import com.livteam.typninja.settings.TypstSettingsService
+import com.livteam.typninja.runtime.TypstRuntimeService
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -39,6 +40,8 @@ data class TypstPreviewResult(
     val failureMessage: String? = null,
     val isRunning: Boolean = false,
     val durationMillis: Long? = null,
+    val previewUrl: String? = null,
+    val sourceMappingAvailable: Boolean = false,
 ) {
     val outputFile: VirtualFile? get() = outputFiles.firstOrNull()
 }
@@ -63,11 +66,11 @@ class TypstPreviewService(
 
     fun statusFor(source: VirtualFile?): TypstPreviewResult? = source?.path?.let(latestResults::get)
 
-    fun preview(source: VirtualFile, unsavedText: String? = null) =
-        compile(source, "png", null, unsavedText, PREVIEW_CHANNEL)
+    fun preview(source: VirtualFile, unsavedText: String? = null, documentVersion: Long = source.modificationStamp) =
+        compile(source, "png", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
 
     fun export(source: VirtualFile, format: String, destination: Path, unsavedText: String? = null) =
-        compile(source, format, destination, unsavedText, "export:$format")
+        compile(source, format, destination, unsavedText, "export:$format", source.modificationStamp)
 
     private fun compile(
         changedSource: VirtualFile,
@@ -75,19 +78,13 @@ class TypstPreviewService(
         destination: Path?,
         unsavedText: String?,
         channel: String,
+        documentVersion: Long,
     ) {
         val normalizedFormat = format.lowercase()
         if (normalizedFormat !in CLI_FORMATS) {
             publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource, "Unsupported Typst export format"))
             return
         }
-        val capability = TypstToolchainService.getInstance(project).currentCapability()
-        if (normalizedFormat in CLI_FORMATS && (!capability.isValid || capability.executablePath == null)) {
-            publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource,
-                capability.failureMessage ?: "Typst executable is unavailable"))
-            return
-        }
-
         val generationCounter = channelGenerations.computeIfAbsent(channel) { AtomicLong() }
         val generation = generationCounter.incrementAndGet()
         activeJobs.remove(channel)?.cancel()
@@ -96,7 +93,33 @@ class TypstPreviewService(
 
         activeJobs[channel] = coroutineScope.launch {
             val startedAt = System.nanoTime()
+            val capability = TypstToolchainService.getInstance(project).awaitCapability()
+            if (!capability.isValid || capability.executablePath == null) {
+                publishCurrent(channel, generation, TypstPreviewResult(
+                    emptyList(), normalizedFormat, changedSource,
+                    capability.failureMessage ?: "Typst executable is unavailable",
+                    durationMillis = elapsedMillis(startedAt),
+                ))
+                return@launch
+            }
             val settings = TypstSettingsService.getInstance(project)
+            if (destination == null && settings.state.useNativeRenderer) {
+                val runtimeResult = TypstRuntimeService.getInstance(project)
+                    .compile(changedSource, unsavedText, render = true, documentVersion)
+                if (runtimeResult != null) {
+                    publishCurrent(channel, generation, TypstPreviewResult(
+                        outputFiles = emptyList(),
+                        format = "svg",
+                        sourceFile = changedSource,
+                        failureMessage = runtimeResult.takeIf { it.outputStatus == "failed" }
+                            ?.diagnostics?.firstOrNull()?.message,
+                        durationMillis = elapsedMillis(startedAt),
+                        previewUrl = runtimeResult.previewUrl,
+                        sourceMappingAvailable = runtimeResult.sourceMappingAvailable,
+                    ))
+                    return@launch
+                }
+            }
             val changedSourcePath = Path.of(changedSource.path).toAbsolutePath().normalize()
             val originalRoot = settings.workspaceRoot(changedSourcePath)
             val originalEntrypoint = settings.mainFile(changedSourcePath)

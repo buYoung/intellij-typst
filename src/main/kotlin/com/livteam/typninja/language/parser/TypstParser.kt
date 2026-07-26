@@ -247,6 +247,10 @@ class TypstParser : PsiParser {
                     left.done(E.FIELD_ACCESS); left = left.precede()
                 }
                 T.LPAREN -> {
+                    // A newline separates code-block expressions. Without this boundary, `let x = 1`
+                    // followed by `(a, b) = ...` is misread as a call on `1`, swallowing the
+                    // destructuring assignment into the preceding let initializer.
+                    if (hasLineBreakBeforeCurrent(builder)) { left.drop(); break }
                     parseArgs(builder, depth)
                     if (builder.tokenType == T.LBRACKET) parseContentBlock(builder, depth) // f(..)[..]
                     left.done(E.FUNC_CALL); left = left.precede()
@@ -285,8 +289,11 @@ class TypstParser : PsiParser {
             T.IDENTIFIER ->
                 if (builder.lookAhead(1) == T.ARROW) parseIdentClosure(builder, depth)
                 else wrapSingle(builder, E.REFERENCE_EXPR) // code-context identifier usage (carries a PsiReference)
+            T.UNDERSCORE ->
+                if (builder.lookAhead(1) == T.ARROW) parseWildcardClosure(builder, depth)
+                else builder.advanceLexer()
             else ->
-                if (isLiteral(t)) builder.advanceLexer() // number / bool / none / auto / underscore
+                if (isLiteral(t)) builder.advanceLexer() // number / bool / none / auto
                 else consumeErrorToken(builder, "Expected an expression")
         }
     }
@@ -633,6 +640,15 @@ class TypstParser : PsiParser {
         marker.done(E.CLOSURE)
     }
 
+    /** `_ => body` single discarded-parameter closure. */
+    private fun parseWildcardClosure(builder: PsiBuilder, depth: Int) {
+        val marker = builder.mark()
+        builder.advanceLexer() // _
+        builder.advanceLexer() // =>
+        if (canStartExpr(builder.tokenType)) parseCodeExpr(builder, 0, depth + 1)
+        marker.done(E.CLOSURE)
+    }
+
     /** A `for`/`let` pattern: identifier, `_`, or destructuring. */
     private fun parsePattern(builder: PsiBuilder, depth: Int) {
         when (builder.tokenType) {
@@ -764,6 +780,14 @@ class TypstParser : PsiParser {
     /** An assignment operator (`=`, `+=`, `-=`, `*=`, `/=`) — used to detect a `let` with no name. */
     private fun isAssignOp(type: IElementType?): Boolean =
         type == T.EQ || type == T.PLUS_EQ || type == T.MINUS_EQ || type == T.STAR_EQ || type == T.SLASH_EQ
+
+    private fun hasLineBreakBeforeCurrent(builder: PsiBuilder): Boolean {
+        if (builder.rawLookup(-1) != TokenType.WHITE_SPACE) return false
+        val whitespaceStart = builder.rawTokenTypeStart(-1)
+        if (whitespaceStart < 0 || whitespaceStart > builder.currentOffset) return false
+        val whitespace = builder.originalText.subSequence(whitespaceStart, builder.currentOffset)
+        return whitespace.any { it == '\n' || it == '\r' }
+    }
 
     private data class BinaryOp(val precedence: Int, val rightAssociative: Boolean, val twoTokens: Boolean)
 

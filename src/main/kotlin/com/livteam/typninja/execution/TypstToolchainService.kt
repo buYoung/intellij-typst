@@ -15,6 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
 
@@ -23,6 +24,7 @@ data class TypstToolchainCapability(
     val version: String? = null,
     val isValid: Boolean = false,
     val failureMessage: String? = null,
+    val isValidationPending: Boolean = false,
 )
 
 /** Validates the configured Typst CLI without using a language server or a shell. */
@@ -45,15 +47,29 @@ class TypstToolchainService(
 
     fun currentCapability(): TypstToolchainCapability = capability
 
+    suspend fun awaitCapability(): TypstToolchainCapability {
+        while (capability.isValidationPending) {
+            val currentJob = validationJob
+            if (currentJob == null) {
+                yield()
+            } else {
+                currentJob.join()
+            }
+        }
+        return capability
+    }
+
     fun requestValidation() {
         val settings = TypstSettingsService.getInstance(project)
         val executablePath = TypstExecutableResolver.resolve(project, settings.state.typstExecutablePath.orEmpty())
         val generation = validationGeneration.incrementAndGet()
         validationJob?.cancel()
+        validationJob = null
         if (executablePath == null) {
             capability = TypstToolchainCapability(failureMessage = "Typst executable was not found automatically")
             return
         }
+        capability = TypstToolchainCapability(executablePath = executablePath, isValidationPending = true)
         validationJob = coroutineScope.launch {
             val validated = validate(executablePath)
             val currentSettings = TypstSettingsService.getInstance(project)

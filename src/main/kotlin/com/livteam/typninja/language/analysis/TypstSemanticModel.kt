@@ -20,6 +20,7 @@ data class TypstCallableSignature(
     val isParameterListComplete: Boolean,
     val definition: TypstDefinition? = null,
     val builtinMetadata: TypstBuiltins.Metadata? = null,
+    val hasSinkParameter: Boolean = false,
 ) {
     val presentation: String = "$name(${parameters.joinToString { it.name }})"
 }
@@ -59,7 +60,13 @@ object TypstSemanticModel {
         ) ?: definition.declarationElement as? TypstLetBinding
         val params = declaration?.node?.findChildByType(E.PARAMS)
             ?: return TypstCallableSignature(definition.name, emptyList(), true, definition)
-        return TypstCallableSignature(definition.name, parameterDefinitions(params), true, definition)
+        return TypstCallableSignature(
+            definition.name,
+            parameterDefinitions(params),
+            true,
+            definition,
+            hasSinkParameter = params.findChildByType(E.SPREAD) != null,
+        )
     }
 
     fun parameterTarget(call: ASTNode, parameterName: String): PsiElement? {

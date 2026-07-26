@@ -20,11 +20,13 @@ class TypstHighlightUsagesHandlerFactory : HighlightUsagesHandlerFactory {
         val typstFile = file as? TypstFile ?: return null
         val offset = editor.caretModel.offset.coerceAtMost(file.textLength)
         val leaf = file.findElementAt(offset) ?: file.findElementAt((offset - 1).coerceAtLeast(0)) ?: return null
-        val targets = referenceTargets(file.findReferenceAt(offset) ?: file.findReferenceAt((offset - 1).coerceAtLeast(0)))
-            .ifEmpty {
-                val owner = PsiTreeUtil.getParentOfType(leaf, PsiNameIdentifierOwner::class.java, false)
-                listOfNotNull(owner)
-            }
+        val reference = file.findReferenceAt(offset) ?: file.findReferenceAt((offset - 1).coerceAtLeast(0))
+        val targets = if (reference != null) {
+            referenceTargets(reference)
+        } else {
+            listOfNotNull(PsiTreeUtil.getParentOfType(leaf, PsiNameIdentifierOwner::class.java, false))
+        }
+        if (targets.any { it is PsiFile }) return null
         if (targets.isEmpty()) return null
         return TypstHighlightUsagesHandler(editor, typstFile, targets.distinct())
     }
@@ -55,8 +57,10 @@ private class TypstHighlightUsagesHandler(
                 myReadUsages.add(reference.absoluteRange)
                 true
             }
-            val nameIdentifier = (target as? PsiNameIdentifierOwner)?.nameIdentifier
-            myWriteUsages.add(nameIdentifier?.textRange ?: target.textRange)
+            if (target.containingFile == myFile) {
+                val nameIdentifier = (target as? PsiNameIdentifierOwner)?.nameIdentifier
+                myWriteUsages.add(nameIdentifier?.textRange ?: target.textRange)
+            }
         }
     }
 }

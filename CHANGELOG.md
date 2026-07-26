@@ -4,6 +4,12 @@
 
 ## [Unreleased]
 ### Added
+- Project-scoped Typst runtime protocol v1 with versioned request correlation, open-document overlays, compiler diagnostics, secure `@preview` package installation, and an editor-integrated JCEF SVG preview with Swing PNG fallback.
+- Typst files now use the IntelliJ editor/preview/split surface instead of a separate preview Tool Window.
+- Parse single discarded-parameter closures such as `_ => value` without false syntax errors.
+- Resolve the Typst standard-library `range` function globally as well as through `array.range`.
+- Platform runtime release builds for Apple Silicon macOS, Intel macOS, 64-bit Windows, and 64-bit GNU/Linux, including size and SHA-256 manifest verification.
+- Settings for compiler diagnostic trigger, package auto-download, native renderer use, and renderer auto-download.
 - Typst file type: `.typ` files are recognised and opened as Typst language files.
 - Lexer and token model: hand-written JFlex lexer covering keywords, identifiers, operators, strings, numbers, comments, raw text, math mode, labels, and references.
 - Parser and PSI foundation: recoverable hand-written parser producing a Typst PSI tree; unclosed groups terminate gracefully without collapsing the rest of the file.

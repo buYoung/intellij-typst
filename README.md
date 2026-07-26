@@ -13,18 +13,22 @@ Native [Typst](https://typst.app) language support for IntelliJ-based IDEs.
 - **Line-comment toggling** — the standard Code → Comment with Line Comment action inserts or removes `//` prefixes.
 - **Navigation and usages** — Go To Declaration supports file-local symbols, labels, relative imports, imported names and known builtins; Find Usages is available for supported `#let` declarations.
 - **Completion and diagnostics** — contextual completion covers local symbols, import members, labels, named arguments, relative paths, keywords and known Typst standard-library symbols; weak diagnostics flag high-confidence unresolved references, labels and relative imports/includes.
+- **Compiler diagnostics** — a project-scoped runtime can compile on save or after a 500ms typing pause, reject stale document generations, and fall back to short-format Typst CLI diagnostics.
+- **Preview packages** — completed `@preview/name:version` imports can be downloaded over HTTPS into the configured or default Typst cache, then exposed to navigation and completion.
+- **Split editor preview** — Typst files open with the standard IntelliJ editor/preview/split modes. JCEF-capable IDEs use a token-protected loopback SVG preview while environments without JCEF retain the Swing PNG view. Explicit exports continue to use the Typst CLI.
 - **Documentation and signatures** — quick documentation and signature help are available for supported user-defined and builtin symbols.
 - **Editor services** — structure view, workspace symbol search, same-symbol highlighting, safe URL/relative-path links, conservative color previews, heading-level intention and comment-aware Enter handling are included.
 
-## Not included in this release
-
-Cross-package `@preview` import resolution, package registry lookup, full Typst type checking, Typst rendering, and PDF preview are deferred to future releases.
+The native PSI language services remain available when the optional runtime cannot be downloaded or started. The integration does not launch a Tinymist executable or use LSP/Tinymist protocols.
 
 ## Build & Run
 
 ```
 # Compile Kotlin sources
 ./gradlew compileKotlin
+
+# Test the native runtime
+cargo test --manifest-path renderer/Cargo.toml
 
 # Launch a sandboxed IDE with the plugin loaded
 ./gradlew runIde

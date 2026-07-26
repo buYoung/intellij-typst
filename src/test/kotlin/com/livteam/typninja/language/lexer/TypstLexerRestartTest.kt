@@ -33,6 +33,9 @@ class TypstLexerRestartTest : LexerTestCase() {
     private val mathRegion = "text $ a + b^2 $ tail"
     private val refAndLabel = "See @intro and <target> here"
     private val measurements = "#set text(size: 12pt, ratio: 50%)"
+    private val multilineDestructuring = "#let (head, ..middle, tail) = (\n  1, 2, 3, 4,\n)"
+    private val multilineMathCall = "$ mat(\n  1, 2;\n  3, 4,\n) + #value $"
+    private val multilineNestedCode = "#{\n  let values = (\n    1, 2,\n  )\n  values.map(x => x + 1)\n}"
 
     private val corpus: List<Pair<String, String>> = listOf(
         "userSnippet" to userSnippet,
@@ -45,6 +48,9 @@ class TypstLexerRestartTest : LexerTestCase() {
         "mathRegion" to mathRegion,
         "refAndLabel" to refAndLabel,
         "measurements" to measurements,
+        "multilineDestructuring" to multilineDestructuring,
+        "multilineMathCall" to multilineMathCall,
+        "multilineNestedCode" to multilineNestedCode,
     )
 
     private fun lexAll(text: String): List<Tok> {
@@ -72,6 +78,9 @@ class TypstLexerRestartTest : LexerTestCase() {
     fun testCheckCorrectRestartMathRegion() = checkCorrectRestart(mathRegion)
     fun testCheckCorrectRestartRefAndLabel() = checkCorrectRestart(refAndLabel)
     fun testCheckCorrectRestartMeasurements() = checkCorrectRestart(measurements)
+    fun testCheckCorrectRestartMultilineDestructuring() = checkCorrectRestart(multilineDestructuring)
+    fun testCheckCorrectRestartMultilineMathCall() = checkCorrectRestart(multilineMathCall)
+    fun testCheckCorrectRestartMultilineNestedCode() = checkCorrectRestart(multilineNestedCode)
 
     // ------------------------------------------------------------------
     // Every restartable boundary reproduces the forward token stream exactly.

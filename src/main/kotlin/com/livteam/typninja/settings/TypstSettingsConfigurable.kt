@@ -36,8 +36,10 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
             component.syntaxOnlyMode != settings.syntaxOnlyMode ||
             component.enableSemanticHighlighting != settings.enableSemanticHighlighting ||
             component.enableSemanticDiagnostics != settings.enableSemanticDiagnostics ||
+            component.compilerDiagnosticsTrigger != settings.compilerDiagnosticsTrigger.orEmpty() ||
             component.enableLint != settings.enableLint ||
             component.showPackageVersionHints != settings.showPackageVersionHints ||
+            component.autoDownloadPackages != settings.autoDownloadPackages ||
             component.enablePostfixCompletion != settings.enablePostfixCompletion ||
             component.enableUfcsCompletion != settings.enableUfcsCompletion ||
             component.enableUfcsLeftCompletion != settings.enableUfcsLeftCompletion ||
@@ -51,6 +53,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
             component.autoPreview != settings.autoPreview.orEmpty() ||
             component.previewArguments != settings.previewArguments.orEmpty() ||
             component.invertPreviewColors != settings.invertPreviewColors ||
+            component.useNativeRenderer != settings.useNativeRenderer ||
+            component.autoDownloadRenderer != settings.autoDownloadRenderer ||
             component.defaultExportFormat != settings.defaultExportFormat.orEmpty() ||
             component.autoExport != settings.autoExport.orEmpty() ||
             component.exportTarget != settings.exportTarget.orEmpty() ||
@@ -76,8 +80,10 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         settings.syntaxOnlyMode = component.syntaxOnlyMode
         settings.enableSemanticHighlighting = component.enableSemanticHighlighting
         settings.enableSemanticDiagnostics = component.enableSemanticDiagnostics
+        settings.compilerDiagnosticsTrigger = component.compilerDiagnosticsTrigger
         settings.enableLint = component.enableLint
         settings.showPackageVersionHints = component.showPackageVersionHints
+        settings.autoDownloadPackages = component.autoDownloadPackages
         settings.enablePostfixCompletion = component.enablePostfixCompletion
         settings.enableUfcsCompletion = component.enableUfcsCompletion
         settings.enableUfcsLeftCompletion = component.enableUfcsLeftCompletion
@@ -91,6 +97,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         settings.autoPreview = component.autoPreview
         settings.previewArguments = component.previewArguments.trim()
         settings.invertPreviewColors = component.invertPreviewColors
+        settings.useNativeRenderer = component.useNativeRenderer
+        settings.autoDownloadRenderer = component.autoDownloadRenderer
         settings.defaultExportFormat = component.defaultExportFormat
         settings.autoExport = component.autoExport
         settings.exportTarget = component.exportTarget
@@ -114,8 +122,10 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         component.syntaxOnlyMode = settings.syntaxOnlyMode
         component.enableSemanticHighlighting = settings.enableSemanticHighlighting
         component.enableSemanticDiagnostics = settings.enableSemanticDiagnostics
+        component.compilerDiagnosticsTrigger = settings.compilerDiagnosticsTrigger.orEmpty().ifBlank { "onSave" }
         component.enableLint = settings.enableLint
         component.showPackageVersionHints = settings.showPackageVersionHints
+        component.autoDownloadPackages = settings.autoDownloadPackages
         component.enablePostfixCompletion = settings.enablePostfixCompletion
         component.enableUfcsCompletion = settings.enableUfcsCompletion
         component.enableUfcsLeftCompletion = settings.enableUfcsLeftCompletion
@@ -129,6 +139,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         component.autoPreview = settings.autoPreview.orEmpty().ifBlank { "onSave" }
         component.previewArguments = settings.previewArguments.orEmpty()
         component.invertPreviewColors = settings.invertPreviewColors
+        component.useNativeRenderer = settings.useNativeRenderer
+        component.autoDownloadRenderer = settings.autoDownloadRenderer
         component.defaultExportFormat = settings.defaultExportFormat.orEmpty().ifBlank { "pdf" }
         component.autoExport = settings.autoExport.orEmpty().ifBlank { "never" }
         component.exportTarget = settings.exportTarget.orEmpty().ifBlank { "paged" }
@@ -151,8 +163,10 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         private val syntaxOnlyCheckBox = JBCheckBox("Syntax-only mode")
         private val semanticHighlightingCheckBox = JBCheckBox("Color functions, variables, parameters, and fields")
         private val semanticDiagnosticsCheckBox = JBCheckBox("Show name and argument problems")
+        private val compilerDiagnosticsComboBox = JComboBox(AUTO_TRIGGERS.toTypedArray())
         private val lintCheckBox = JBCheckBox("Show safe code warnings")
         private val packageVersionHintsCheckBox = JBCheckBox("Show installed package version state")
+        private val autoDownloadPackagesCheckBox = JBCheckBox("Download completed @preview imports automatically")
         private val onEnterCheckBox = JBCheckBox("Continue comments, lists, and math indentation on Enter")
 
         private val postfixCheckBox = JBCheckBox("Enable postfix completion")
@@ -171,6 +185,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         private val autoPreviewComboBox = JComboBox(AUTO_TRIGGERS.toTypedArray())
         private val previewArgumentsField = JBTextField()
         private val invertPreviewCheckBox = JBCheckBox("Invert preview colors")
+        private val nativeRendererCheckBox = JBCheckBox("Use native incremental SVG renderer")
+        private val autoDownloadRendererCheckBox = JBCheckBox("Download the renderer when first needed")
 
         private val exportFormatComboBox = JComboBox(EXPORT_FORMATS.toTypedArray())
         private val autoExportComboBox = JComboBox(AUTO_TRIGGERS.toTypedArray())
@@ -195,12 +211,18 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         var enableSemanticDiagnostics: Boolean
             get() = semanticDiagnosticsCheckBox.isSelected
             set(value) { semanticDiagnosticsCheckBox.isSelected = value }
+        var compilerDiagnosticsTrigger: String
+            get() = compilerDiagnosticsComboBox.selectedItem as String
+            set(value) { compilerDiagnosticsComboBox.selectedItem = value }
         var enableLint: Boolean
             get() = lintCheckBox.isSelected
             set(value) { lintCheckBox.isSelected = value }
         var showPackageVersionHints: Boolean
             get() = packageVersionHintsCheckBox.isSelected
             set(value) { packageVersionHintsCheckBox.isSelected = value }
+        var autoDownloadPackages: Boolean
+            get() = autoDownloadPackagesCheckBox.isSelected
+            set(value) { autoDownloadPackagesCheckBox.isSelected = value }
         var enableOnEnter: Boolean
             get() = onEnterCheckBox.isSelected
             set(value) { onEnterCheckBox.isSelected = value }
@@ -232,6 +254,12 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         var invertPreviewColors: Boolean
             get() = invertPreviewCheckBox.isSelected
             set(value) { invertPreviewCheckBox.isSelected = value }
+        var useNativeRenderer: Boolean
+            get() = nativeRendererCheckBox.isSelected
+            set(value) { nativeRendererCheckBox.isSelected = value }
+        var autoDownloadRenderer: Boolean
+            get() = autoDownloadRendererCheckBox.isSelected
+            set(value) { autoDownloadRendererCheckBox.isSelected = value }
         var defaultExportFormat: String
             get() = exportFormatComboBox.selectedItem as String
             set(value) { exportFormatComboBox.selectedItem = value }
@@ -257,11 +285,13 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
                 row("Package folder:") { cell(packagePathField).align(AlignX.FILL) }
                 row("Package cache folder:") { cell(packageCachePathField).align(AlignX.FILL) }
                 row { cell(packageVersionHintsCheckBox) }
+                row { cell(autoDownloadPackagesCheckBox) }
             }
             group("Editor") {
                 row { cell(syntaxOnlyCheckBox) }
                 row { cell(semanticHighlightingCheckBox) }
                 row { cell(semanticDiagnosticsCheckBox) }
+                row("Compiler diagnostics:") { cell(compilerDiagnosticsComboBox) }
                 row { cell(lintCheckBox) }
                 row { cell(onEnterCheckBox) }
             }
@@ -282,6 +312,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
                 row("Image PPI:") { cell(previewPpiSpinner) }
                 row("Preview arguments:") { cell(previewArgumentsField).align(AlignX.FILL) }
                 row { cell(invertPreviewCheckBox) }
+                row { cell(nativeRendererCheckBox) }
+                row { cell(autoDownloadRendererCheckBox) }
             }
             group("Export and pasted files") {
                 row("Default format:") { cell(exportFormatComboBox) }

@@ -16,10 +16,13 @@
             <li>Declaration-side Find Usages for supported file-local <code>#let</code> variables and functions.</li>
             <li>Contextual completion for local symbols, import members, labels, named arguments, relative paths, keywords and known Typst standard-library symbols.</li>
             <li>Weak diagnostics for high-confidence unresolved references, labels and relative imports/includes.</li>
+            <li>Optional compiler diagnostics on save or after a typing debounce, with stale-result rejection and Typst CLI fallback.</li>
+            <li>Automatic HTTPS installation of completed <code>@preview/name:version</code> imports into the Typst package cache.</li>
+            <li>Editor-integrated source, preview and split modes with a token-protected JCEF SVG session and a Swing PNG fallback when JCEF is unavailable.</li>
             <li>Quick documentation and signature help for supported user and builtin symbols.</li>
             <li>Structure view, workspace symbol search, occurrence highlighting, URL/relative-path links, color previews, heading intentions and comment-aware Enter handling.</li>
         </ul>
-        <p>This is an MVP release. Cross-package <code>@preview</code> imports, full Typst type checking, package registry lookup, Typst rendering and PDF preview are not included.</p>
+        <p>The native PSI language services remain available without the optional runtime. Explicit PDF, PNG, SVG and HTML exports continue to use the configured Typst CLI.</p>
     ]]></description>
 
     <depends>com.intellij.modules.platform</depends>
@@ -52,9 +55,8 @@
                              displayName="Typst"
                              parentId="tools"/>
         <additionalLibraryRootsProvider implementation="com.livteam.typninja.language.references.TypstPackageLibraryRootsProvider"/>
-        <toolWindow id="Typst Preview"
-                    anchor="right"
-                    factoryClass="com.livteam.typninja.preview.TypstPreviewToolWindowFactory"/>
+        <fileEditorProvider id="typst-preview-editor"
+                            implementation="com.livteam.typninja.preview.TypstSplitEditorProvider"/>
         <toolWindow id="Typst"
                     anchor="left"
                     secondary="true"

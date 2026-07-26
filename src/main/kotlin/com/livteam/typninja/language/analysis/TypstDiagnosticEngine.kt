@@ -94,7 +94,9 @@ object TypstDiagnosticEngine {
                 E.NAMED -> {
                     val name = child.findChildByType(T.IDENTIFIER)?.text ?: ""
                     if (name.isNotEmpty() && !named.add(name)) diagnostics.add(semantic(child, "Duplicate named argument `$name`"))
-                    if (name.isNotEmpty() && signature.isParameterListComplete && signature.parameters.none { it.name == name }) {
+                    if (name.isNotEmpty() && signature.isParameterListComplete && !signature.hasSinkParameter &&
+                        signature.parameters.none { it.name == name }
+                    ) {
                         val nameNode = child.findChildByType(T.IDENTIFIER) ?: child
                         val suggestion = signature.parameters.asSequence()
                             .map { it.name }
@@ -114,6 +116,7 @@ object TypstDiagnosticEngine {
             child = child.treeNext
         }
         val hasTrailingContent = call.findChildByType(E.CONTENT_BLOCK) != null
+        if (hasAncestor(call, E.SET_RULE)) return
         signature.parameters.filter { it.isRequired }.forEachIndexed { index, parameter ->
             val isSuppliedByTrailingContent = hasTrailingContent &&
                 (parameter.name == "body" || parameter.typeName == "content")

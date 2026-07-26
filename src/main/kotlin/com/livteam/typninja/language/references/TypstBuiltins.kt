@@ -49,7 +49,7 @@ object TypstBuiltins {
         "sub", "super", "smallcaps", "upper", "lower", "smartquote", "linebreak", "lorem",
         "counter", "state", "query", "locate", "here", "metadata", "assert", "eval", "panic",
         "repr", "target", "plugin", "read", "csv", "json", "toml", "yaml", "xml", "cbor",
-        "rgb", "luma", "cmyk", "oklab", "oklch", "linear-rgb", "hsv", "hsl", "entry", "spot",
+        "range", "rgb", "luma", "cmyk", "oklab", "oklch", "linear-rgb", "hsv", "hsl", "entry", "spot",
     )
 
     /** Built-in types (usable as values, e.g. `type(x) == int`). */
@@ -157,6 +157,12 @@ object TypstBuiltins {
         ),
         "bibliography" to listOf(Parameter("path", isRequired = true), Parameter("title"), Parameter("full", typeName = "bool"), Parameter("style")),
         "raw" to listOf(Parameter("text", isRequired = true, typeName = "str"), Parameter("block", typeName = "bool"), Parameter("lang", typeName = "str"), Parameter("align", typeName = "alignment"), Parameter("syntaxes"), Parameter("theme"), Parameter("tab-size", typeName = "int")),
+        "range" to listOf(
+            Parameter("start", typeName = "int"),
+            Parameter("end", isRequired = true, typeName = "int"),
+            Parameter("inclusive", typeName = "bool"),
+            Parameter("step", typeName = "int"),
+        ),
     )
 
     // Only signatures checked against the bundled Tinymist 0.15 snapshots are used to report an
@@ -174,6 +180,7 @@ object TypstBuiltins {
         "smallcaps" to "content", "upper" to "str", "lower" to "str", "repr" to "str",
         "read" to "str", "csv" to "array", "json" to "dictionary", "toml" to "dictionary",
         "yaml" to "dictionary", "xml" to "array", "cbor" to "dictionary", "type" to "type",
+        "range" to "array",
         "rgb" to "color", "luma" to "color", "cmyk" to "color", "oklab" to "color",
         "oklch" to "color", "linear-rgb" to "color", "hsv" to "color", "here" to "location",
     )
@@ -190,6 +197,7 @@ object TypstBuiltins {
         "figure" to "Wraps content as a numbered figure.",
         "bibliography" to "Includes bibliography data.",
         "raw" to "Displays raw text or code.",
+        "range" to "Creates an array containing a sequence of integers.",
         "color" to "Represents a color value.",
         "str" to "Represents text strings.",
         "int" to "Represents integer numbers.",

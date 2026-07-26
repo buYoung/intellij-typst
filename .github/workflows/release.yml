@@ -8,10 +8,51 @@ on:
     types: [ prereleased, released ]
 
 jobs:
+  runtime:
+    name: Build runtime (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            executable: typst-runtime
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            executable: typst-runtime
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            executable: typst-runtime.exe
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            executable: typst-runtime
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Fetch Sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: Build runtime
+        run: cargo build --release --locked --manifest-path renderer/Cargo.toml --target ${{ matrix.target }}
+      - name: Stage runtime
+        shell: bash
+        run: |
+          cp "renderer/target/${{ matrix.target }}/release/${{ matrix.executable }}" \
+             "typst-runtime-${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}"
+      - name: Upload runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: typst-runtime-${{ matrix.target }}
+          path: typst-runtime-${{ matrix.target }}*
 
   # Prepare and publish the plugin to JetBrains Marketplace repository
   release:
     name: Publish Plugin
+    needs: [ runtime ]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -44,6 +85,20 @@ jobs:
         with:
           cache-read-only: true
 
+      - name: Download runtime assets
+        uses: actions/download-artifact@v8
+        with:
+          pattern: typst-runtime-*
+          path: build/runtime-assets
+          merge-multiple: true
+
+      - name: Generate runtime manifest
+        run: |
+          python3 scripts/generate_runtime_manifest.py \
+            build/runtime-assets \
+            src/main/resources/typst-runtime/manifest.json \
+            --base-url "https://github.com/${{ github.repository }}/releases/download/${{ github.event.release.tag_name }}"
+
       # Update the Unreleased section with the current release note
       - name: Patch Changelog
         if: ${{ github.event.release.body != '' }}
@@ -69,7 +124,9 @@ jobs:
       - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
+        run: |
+          gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
+          gh release upload ${{ github.event.release.tag_name }} ./build/runtime-assets/*
 
       # Create a pull request
       - name: Create Pull Request

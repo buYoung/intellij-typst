@@ -5,6 +5,8 @@ import com.intellij.lang.annotation.Annotator
 import com.intellij.lang.annotation.HighlightSeverity
 import com.intellij.codeInspection.ProblemHighlightType
 import com.intellij.openapi.project.DumbAware
+import com.intellij.openapi.util.TextRange
+import com.intellij.psi.PsiDocumentManager
 import com.intellij.psi.PsiElement
 import com.livteam.typninja.language.analysis.TypstAnalysis
 import com.livteam.typninja.language.analysis.TypstDiagnosticCategory
@@ -12,11 +14,14 @@ import com.livteam.typninja.language.analysis.TypstDiagnosticEngine
 import com.livteam.typninja.language.actions.TypstTextEditIntention
 import com.livteam.typninja.language.analysis.TypstModuleFiles
 import com.livteam.typninja.language.psi.TypstModuleImport
+import com.livteam.typninja.language.psi.TypstFile
 import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import com.livteam.typninja.language.references.TypstBuiltins
 import com.livteam.typninja.language.references.TypstLabelResolver
 import com.livteam.typninja.settings.TypstSettingsService
+import com.livteam.typninja.runtime.TypstRuntimeDiagnostic
+import com.livteam.typninja.runtime.TypstRuntimeService
 import com.livteam.typninja.language.psi.TypstTokenTypes as T
 import com.livteam.typninja.language.psi.TypstElementTypes as E
 
@@ -25,11 +30,18 @@ class TypstDiagnosticsAnnotator : Annotator, DumbAware {
     override fun annotate(element: PsiElement, holder: AnnotationHolder) {
         val settings = TypstSettingsService.getInstance(element.project).state
         if (settings.syntaxOnlyMode) return
+        val compilerDiagnostics = element.containingFile.virtualFile?.let {
+            TypstRuntimeService.getInstance(element.project).diagnosticsFor(it)
+        }.orEmpty()
+        if (element is TypstFile && settings.compilerDiagnosticsTrigger.orEmpty().ifBlank { "onSave" } != "never") {
+            annotateCompilerDiagnostics(element, compilerDiagnostics, holder)
+        }
         if (!settings.enableSemanticDiagnostics && !settings.enableLint) return
+        val compilerRanges = compilerDiagnostics.mapNotNull { diagnosticRange(element, it) }.toSet()
         TypstDiagnosticEngine.diagnosticsFor(element).forEach { diagnostic ->
             val enabled = diagnostic.category == TypstDiagnosticCategory.SEMANTIC && settings.enableSemanticDiagnostics ||
                 diagnostic.category == TypstDiagnosticCategory.LINT && settings.enableLint
-            if (enabled) {
+            if (enabled && diagnostic.range !in compilerRanges) {
                 val builder = holder.newAnnotation(diagnostic.severity, diagnostic.message).range(diagnostic.range)
                 diagnostic.fix?.let { fix ->
                     builder.withFix(TypstTextEditIntention(fix.text, element, fix.range, fix.replacement))
@@ -46,6 +58,36 @@ class TypstDiagnosticsAnnotator : Annotator, DumbAware {
             is TypstModuleImport -> if (settings.enableSemanticDiagnostics) annotateImport(element, holder)
             else -> if (settings.enableSemanticDiagnostics && element.node.elementType == E.MODULE_INCLUDE) annotateInclude(element, holder)
         }
+    }
+
+    private fun annotateCompilerDiagnostics(
+        file: TypstFile,
+        diagnostics: List<TypstRuntimeDiagnostic>,
+        holder: AnnotationHolder,
+    ) {
+        diagnostics.forEach { diagnostic ->
+            val range = diagnosticRange(file, diagnostic) ?: return@forEach
+            val severity = if (diagnostic.severity == "warning") HighlightSeverity.WARNING else HighlightSeverity.ERROR
+            val message = buildString {
+                append(diagnostic.message)
+                diagnostic.trace.forEach { append("\n").append(it) }
+            }
+            holder.newAnnotation(severity, message).range(range).create()
+        }
+    }
+
+    private fun diagnosticRange(element: PsiElement, diagnostic: TypstRuntimeDiagnostic): TextRange? {
+        val document = PsiDocumentManager.getInstance(element.project).getDocument(element.containingFile) ?: return null
+        if (diagnostic.startLine !in 0 until document.lineCount) return null
+        val startLineOffset = document.getLineStartOffset(diagnostic.startLine)
+        val startLineEnd = document.getLineEndOffset(diagnostic.startLine)
+        val start = (startLineOffset + diagnostic.startColumn).coerceIn(startLineOffset, startLineEnd)
+        val endLine = diagnostic.endLine.coerceIn(diagnostic.startLine, document.lineCount - 1)
+        val endLineOffset = document.getLineStartOffset(endLine)
+        val endLineEnd = document.getLineEndOffset(endLine)
+        val end = (endLineOffset + diagnostic.endColumn).coerceIn(endLineOffset, endLineEnd)
+            .coerceAtLeast((start + 1).coerceAtMost(document.textLength))
+        return TextRange(start, end)
     }
 
     private fun annotateReference(element: TypstReferenceExpression, holder: AnnotationHolder) {

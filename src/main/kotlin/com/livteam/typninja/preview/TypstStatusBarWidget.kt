@@ -18,6 +18,7 @@ import com.intellij.openapi.wm.StatusBarWidget
 import com.intellij.openapi.wm.StatusBarWidgetFactory
 import com.intellij.openapi.wm.impl.status.EditorBasedStatusBarPopup
 import com.livteam.typninja.language.TypstFileType
+import com.livteam.typninja.runtime.TypstRuntimeService
 
 class TypstStatusBarWidgetFactory : StatusBarWidgetFactory {
     override fun getId(): String = WIDGET_ID
@@ -53,7 +54,8 @@ private class TypstStatusBarWidget(private val typstProject: Project) : EditorBa
             result?.durationMillis != null -> "${result.durationMillis}ms"
             else -> "ready"
         }
-        val text = "Typst · ${file.name} · $wordCount words · $compileState"
+        val runtimeState = TypstRuntimeService.getInstance(typstProject).status.name.lowercase().replace('_', ' ')
+        val text = "Typst · ${file.name} · $wordCount words · $compileState · $runtimeState"
         return WidgetState("Typst preview, export, and document status", text, true)
     }
 

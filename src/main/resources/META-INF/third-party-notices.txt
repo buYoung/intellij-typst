@@ -1,0 +1,13 @@
+Typst runtime third-party notices
+=================================
+
+The optional typst-runtime executable includes:
+
+- Typst 0.15.0, Copyright the Typst Project Developers, Apache License 2.0
+  https://github.com/typst/typst
+- reflexo-typst 0.8.0-rc3 and reflexo-vec2svg 0.8.0-rc3,
+  Copyright Myriad Dreamin contributors, Apache License 2.0
+  https://github.com/Myriad-Dreamin/typst.ts
+
+Complete transitive dependency license metadata is preserved in Cargo.lock and must be
+reviewed as part of the release artifact compliance process.

@@ -5,8 +5,9 @@ import com.intellij.icons.AllIcons
 import com.intellij.openapi.actionSystem.AnAction
 import com.intellij.openapi.actionSystem.AnActionEvent
 import com.intellij.openapi.fileEditor.FileDocumentManager
+import com.intellij.openapi.fileEditor.FileEditorManager
+import com.intellij.openapi.fileEditor.TextEditorWithPreview
 import com.intellij.openapi.project.DumbAware
-import com.intellij.openapi.wm.ToolWindowManager
 import com.intellij.psi.PsiElement
 import com.intellij.psi.TokenType
 import com.intellij.psi.util.PsiTreeUtil
@@ -29,7 +30,8 @@ class TypstRunLineMarkerContributor : RunLineMarkerContributor(), DumbAware {
             override fun actionPerformed(event: AnActionEvent) {
                 val currentText = FileDocumentManager.getInstance().getDocument(virtualFile)?.text
                 TypstPreviewService.getInstance(file.project).preview(virtualFile, currentText)
-                ToolWindowManager.getInstance(file.project).getToolWindow("Typst Preview")?.show()
+                (FileEditorManager.getInstance(file.project).getSelectedEditor(virtualFile) as? TextEditorWithPreview)
+                    ?.setLayout(TextEditorWithPreview.Layout.SHOW_EDITOR_AND_PREVIEW)
             }
         }
         val export = object : AnAction("Export Typst", "Export using the configured format and output path", AllIcons.Actions.Download) {

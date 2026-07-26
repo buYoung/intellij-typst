@@ -23,6 +23,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  runtime:
+    name: Runtime (${{ matrix.target }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            target: aarch64-apple-darwin
+            executable: typst-runtime
+          - runner: macos-15-intel
+            target: x86_64-apple-darwin
+            executable: typst-runtime
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+            executable: typst-runtime.exe
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            executable: typst-runtime
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Fetch Sources
+        uses: actions/checkout@v6
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@1.92.0
+        with:
+          targets: ${{ matrix.target }}
+      - name: Test runtime
+        run: cargo test --manifest-path renderer/Cargo.toml
+      - name: Build runtime
+        run: cargo build --release --locked --manifest-path renderer/Cargo.toml --target ${{ matrix.target }}
+      - name: Smoke test runtime
+        shell: bash
+        run: |
+          RUNTIME="renderer/target/${{ matrix.target }}/release/${{ matrix.executable }}"
+          printf '%s\n' '{"id":"smoke","workspaceId":"ci","documentVersion":0,"generation":0,"method":"shutdown","params":{}}' \
+            | "$RUNTIME" \
+            | grep '"protocolVersion":1'
+          cp "$RUNTIME" "typst-runtime-${{ matrix.target }}${{ matrix.target == 'x86_64-pc-windows-msvc' && '.exe' || '' }}"
+      - name: Upload runtime
+        uses: actions/upload-artifact@v7
+        with:
+          name: typst-runtime-${{ matrix.target }}
+          path: typst-runtime-${{ matrix.target }}*
 
   # Prepare the environment and build the plugin
   build:
@@ -93,6 +136,16 @@ jobs:
         uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: true
+
+      - name: Install Typst 0.15.1
+        shell: bash
+        run: |
+          curl -L --fail --silent --show-error \
+            https://github.com/typst/typst/releases/download/v0.15.1/typst-x86_64-unknown-linux-musl.tar.xz \
+            -o /tmp/typst.tar.xz
+          tar -xJf /tmp/typst.tar.xz -C /tmp
+          sudo install /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst
+          typst --version
 
       # Run tests
       - name: Run Tests
