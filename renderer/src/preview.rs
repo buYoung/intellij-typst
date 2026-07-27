@@ -234,12 +234,11 @@ body {{ margin:0;background:#777 }}
 .semantic.link:hover {{ outline:1.5px solid #66bab7;background:#66bab724 }}
 .semantic.shape:hover {{ outline:1.5px solid #29a6a6 }}
 body.dragging,body.dragging * {{ cursor:grabbing!important;user-select:none!important }}
-.ripple {{ position:absolute;width:10px;height:10px;border:2px solid #f75c2f;border-radius:50%;transform:translate(-50%,-50%);animation:ripple 900ms ease-out forwards;pointer-events:none }}
-@keyframes ripple {{ to {{ width:54px;height:54px;opacity:0 }} }}
+.selection-line {{ position:absolute;box-sizing:border-box;background:#f75c2f2e;border-left:3px solid #f75c2f;box-shadow:0 0 0 1px #f75c2f4d inset;pointer-events:none }}
 body.invert .page {{ filter:invert(1) hue-rotate(180deg) }}
 </style><div id="pages"></div><script nonce="{nonce}">
 (() => {{
- let scale=1,generation=-1,drag=null; const pages=document.getElementById('pages');
+ let scale=1,generation=-1,drag=null,pendingSelection=null,shownSelectionToken=null; const pages=document.getElementById('pages');
  const save=()=>sessionStorage.setItem('typst-preview-state',JSON.stringify(window.typstPreview.state()));
  const visible=new IntersectionObserver(entries=>entries.forEach(e=>{{if(e.isIntersecting)loadPage(e.target)}}),{{rootMargin:'1200px 0px'}});
  async function loadPage(section){{
@@ -250,6 +249,7 @@ body.invert .page {{ filter:invert(1) hue-rotate(180deg) }}
    for(const region of regions){{
      const node=document.createElement(region.kind==='link'&&region.url?'a':'div');node.className='semantic '+region.kind;
      Object.assign(node.style,{{left:(region.x/pageWidth*100)+'%',top:(region.y/pageHeight*100)+'%',width:(region.width/pageWidth*100)+'%',height:(region.height/pageHeight*100)+'%'}});
+     node.dataset.x=region.x;node.dataset.y=region.y;node.dataset.width=region.width;node.dataset.height=region.height;
      if(region.url)node.href=region.url;
      if(region.page){{node.dataset.targetPage=region.page;node.dataset.targetX=region.targetX||0;node.dataset.targetY=region.targetY||0}}
      section.appendChild(node);
@@ -260,10 +260,10 @@ body.invert .page {{ filter:invert(1) hue-rotate(180deg) }}
      const old=new Map([...pages.children].map(e=>[e.dataset.page+':'+e.dataset.key,e]));const fragment=document.createDocumentFragment();
      for(const page of snapshot.pages){{let section=old.get(page.number+':'+page.key);if(!section){{section=document.createElement('section');section.className='page';section.innerHTML='<div class="placeholder"></div>'}}
        section.dataset.page=page.number;section.dataset.key=page.key;section.dataset.width=page.width;section.dataset.height=page.height;section.style.aspectRatio=page.width+'/'+page.height;fragment.appendChild(section);visible.observe(section)}}
-     pages.replaceChildren(fragment);
+     pages.replaceChildren(fragment);renderSelection();
    }}catch(_e){{}}
  }}
- function ripple(page,x,y){{const node=document.createElement('span');node.className='ripple';node.style.left=(x/Number(page.dataset.width)*100)+'%';node.style.top=(y/Number(page.dataset.height)*100)+'%';page.appendChild(node);setTimeout(()=>node.remove(),900)}}
+ function renderSelection(){{const selection=pendingSelection;if(!selection)return;const existing=pages.querySelector('.selection-line');if(selection.token===shownSelectionToken&&existing)return;const page=pages.querySelector('[data-page="'+selection.page+'"]');if(!page)return;loadPage(page).then(()=>{{if(pendingSelection?.token!==selection.token)return;pages.querySelectorAll('.selection-line').forEach(node=>node.remove());const regions=[...page.querySelectorAll('.semantic.text')].map(node=>({{x:Number(node.dataset.x),y:Number(node.dataset.y),width:Number(node.dataset.width),height:Number(node.dataset.height)}})).filter(region=>Object.values(region).every(Number.isFinite));let bounds;if(regions.length){{const seed=regions.reduce((best,region)=>Math.abs(selection.y-(region.y+region.height/2))<Math.abs(selection.y-(best.y+best.height/2))?region:best);const line=regions.filter(region=>Math.min(region.y+region.height,seed.y+seed.height)-Math.max(region.y,seed.y)>Math.min(region.height,seed.height)*.35);bounds={{x:Math.min(...line.map(region=>region.x)),y:Math.min(...line.map(region=>region.y)),right:Math.max(...line.map(region=>region.x+region.width)),bottom:Math.max(...line.map(region=>region.y+region.height))}}}}else{{const height=12;bounds={{x:0,y:Math.max(0,selection.y-height/2),right:Number(page.dataset.width),bottom:selection.y+height/2}}}}const node=document.createElement('div');node.className='selection-line';Object.assign(node.style,{{left:(bounds.x/Number(page.dataset.width)*100)+'%',top:(bounds.y/Number(page.dataset.height)*100)+'%',width:((bounds.right-bounds.x)/Number(page.dataset.width)*100)+'%',height:((bounds.bottom-bounds.y)/Number(page.dataset.height)*100)+'%'}});page.appendChild(node);shownSelectionToken=selection.token;window.__typstPreviewLastSelectionToken=selection.token}})}}
  pages.addEventListener('click',event=>{{const internal=event.target.closest?.('[data-target-page]');if(!internal)return;event.preventDefault();event.stopImmediatePropagation();const target=pages.querySelector('[data-page="'+internal.dataset.targetPage+'"]');target?.scrollIntoView({{behavior:'smooth',block:'center'}})}} ,true);
  pages.addEventListener('pointerdown',event=>{{drag={{x:event.clientX,y:event.clientY,scrollY}}}},true);
  addEventListener('pointermove',event=>{{if(!drag)return;const dx=event.clientX-drag.x,dy=event.clientY-drag.y;if(Math.hypot(dx,dy)>4){{drag.moved=true;document.body.classList.add('dragging');scrollTo(0,drag.scrollY-dy)}}}},true);
@@ -272,7 +272,8 @@ body.invert .page {{ filter:invert(1) hue-rotate(180deg) }}
    setScale:v=>{{scale=Math.max(.2,Math.min(1,Number(v)||1));pages.style.setProperty('--preview-scale',scale);save()}},
    setInvert:v=>{{document.body.classList.toggle('invert',!!v);save()}},
    showPage:n=>pages.querySelector('[data-page="'+n+'"]')?.scrollIntoView({{block:'start'}}),
-   showPosition:(n,x,y)=>{{const page=pages.querySelector('[data-page="'+n+'"]');page?.scrollIntoView({{behavior:'smooth',block:'center'}});if(page)loadPage(page).then(()=>ripple(page,x,y))}},
+   showSelection:(token,n,x,y)=>{{pendingSelection={{token,page:n,x,y}};renderSelection()}},
+   showPosition:(n,x,y)=>{{const page=pages.querySelector('[data-page="'+n+'"]');page?.scrollIntoView({{behavior:'smooth',block:'center'}});window.typstPreview.showSelection(Date.now(),n,x,y)}},
    showPositions:positions=>{{let best=null,distance=Infinity;const center=scrollY+innerHeight/2;for(const position of positions||[]){{const page=pages.querySelector('[data-page="'+position.page+'"]');if(!page)continue;const point=page.offsetTop+(position.y/Number(page.dataset.height))*page.offsetHeight;const next=Math.abs(point-center);if(next<distance){{distance=next;best=position}}}}if(best)window.typstPreview.showPosition(best.page,best.x,best.y)}},
    refresh,state:()=>({{scale,scrollY}}),restore:s=>{{if(s){{window.typstPreview.setScale(s.scale||1);scrollTo(0,s.scrollY||0)}}}}
  }};

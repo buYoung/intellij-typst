@@ -34,7 +34,7 @@ private class TypstPreviewFileEditorProvider : FileEditorProvider, DumbAware {
         TypstPreviewFileEditor(
             project,
             file,
-            project.service<TypstPreviewBindingService>().previewSourceFor(file),
+            project.service<TypstPreviewBindingService>().bindingFor(file),
         )
 
     override fun getEditorTypeId(): String = "typst-preview"

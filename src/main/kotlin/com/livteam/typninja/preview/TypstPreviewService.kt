@@ -63,6 +63,7 @@ class TypstPreviewService(
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val activeRequests = ConcurrentHashMap<String, CompilationRequest>()
     private val latestResults = ConcurrentHashMap<String, TypstPreviewResult>()
+    private val latestSuccessfulResults = ConcurrentHashMap<String, TypstPreviewResult>()
 
     fun addListener(listener: (TypstPreviewResult) -> Unit): () -> Unit {
         listeners.add(listener)
@@ -70,6 +71,9 @@ class TypstPreviewService(
     }
 
     fun statusFor(source: VirtualFile?): TypstPreviewResult? = source?.path?.let(latestResults::get)
+
+    fun lastSuccessfulFor(source: VirtualFile?): TypstPreviewResult? =
+        source?.path?.let(latestSuccessfulResults::get)
 
     fun preview(source: VirtualFile, unsavedText: String? = null, documentVersion: Long = source.modificationStamp) =
         compile(source, "svg", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
@@ -337,6 +341,11 @@ class TypstPreviewService(
 
     private fun publish(result: TypstPreviewResult) {
         result.sourceFile?.path?.let { latestResults[it] = result }
+        if (!result.isRunning && result.failureMessage == null &&
+            (result.previewUrl != null || result.outputFiles.isNotEmpty())
+        ) {
+            result.sourceFile?.path?.let { latestSuccessfulResults[it] = result }
+        }
         listeners.forEach { listener -> listener(result) }
         if (!result.isRunning) result.failureMessage?.let { message ->
             NotificationGroupManager.getInstance().getNotificationGroup("Typst")
@@ -354,6 +363,7 @@ class TypstPreviewService(
         activeProcesses.clear()
         previewDirectories.clear()
         latestResults.clear()
+        latestSuccessfulResults.clear()
         listeners.clear()
     }
 

@@ -18,12 +18,14 @@ import com.intellij.openapi.editor.ScrollType
 import com.intellij.openapi.editor.event.EditorMouseEvent
 import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.util.UserDataHolderBase
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.intellij.ui.jcef.JBCefApp
 import com.intellij.ui.jcef.JBCefBrowser
 import com.intellij.ui.jcef.JBCefBrowserBase
 import com.intellij.ui.jcef.JBCefJSQuery
+import com.intellij.util.Alarm
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.livteam.typninja.runtime.TypstRuntimeService
 import com.livteam.typninja.runtime.TypstRuntimeSourcePosition
@@ -49,9 +51,10 @@ import javax.swing.SwingConstants
 internal class TypstPreviewPanel(
     private val project: Project,
     private val editorFile: VirtualFile,
-    initialPreviewSource: VirtualFile,
+    initialBinding: TypstPreviewBinding,
 ) : Disposable {
-    private var sourceFile = initialPreviewSource
+    private var sourceFile = initialBinding.previewSource
+    private var pendingPreviewSelection = initialBinding.selection
     private val browser = if (JBCefApp.isSupported()) JBCefBrowser() else null
     private val previewLinkQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
     private val previewPositionQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
@@ -66,6 +69,7 @@ internal class TypstPreviewPanel(
             }
         }
     }
+    private val bridgeInjectionAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
     private val previewComponent = browser?.component ?: JLabel(
         "Typst preview requires JCEF in the IDE runtime.",
         SwingConstants.CENTER,
@@ -83,16 +87,26 @@ internal class TypstPreviewPanel(
     private var sourceMappingContext: SourceMappingContext? = null
     @Volatile
     private var isDisposed = false
+    private var hasRequestedInitialPreview = false
+    private var hasDeselectedBoundPreview = false
     private var removeServiceListener: (() -> Unit)? = null
     private var removeBindingListener: (() -> Unit)? = null
 
-    val component = JPanel(BorderLayout()).apply {
-        add(buildToolbar(), BorderLayout.NORTH)
-        add(previewComponent, BorderLayout.CENTER)
-        add(statusLabel, BorderLayout.SOUTH)
+    val component = object : JPanel(BorderLayout()) {
+        init {
+            add(buildToolbar(), BorderLayout.NORTH)
+            add(previewComponent, BorderLayout.CENTER)
+            add(statusLabel, BorderLayout.SOUTH)
+        }
+
+        override fun addNotify() {
+            super.addNotify()
+            onAdded()
+        }
     }
 
     init {
+        Disposer.register(project, this)
         previewLinkQuery?.addHandler(::openPreviewLink)
         previewPositionQuery?.addHandler(::openPreviewPosition)
         if (browser != null && previewLoadHandler != null) {
@@ -100,11 +114,17 @@ internal class TypstPreviewPanel(
         }
         invertCheckBox.isSelected = TypstSettingsService.getInstance(project).state.invertPreviewColors
         removeServiceListener = TypstPreviewService.getInstance(project).addListener(::acceptResult)
-        removeBindingListener = project.service<TypstPreviewBindingService>().addListener(editorFile) { previewSource ->
-            if (previewSource == sourceFile) return@addListener
-            sourceFile = previewSource
-            sourceMappingContext = null
-            showLatestOrRefresh()
+        removeBindingListener = project.service<TypstPreviewBindingService>().addListener(editorFile) { binding ->
+            val hasSourceChanged = binding.previewSource != sourceFile
+            sourceFile = binding.previewSource
+            pendingPreviewSelection = binding.selection
+            hasDeselectedBoundPreview = false
+            if (hasSourceChanged) {
+                sourceMappingContext = null
+                showLatestOrRefresh()
+            } else {
+                showPendingPreviewSelection()
+            }
         }
         EditorFactory.getInstance().eventMulticaster.addEditorMouseListener(
             object : EditorMouseListener {
@@ -149,12 +169,49 @@ internal class TypstPreviewPanel(
     }
 
     fun showLatestOrRefresh() {
-        val existingResult = TypstPreviewService.getInstance(project).statusFor(sourceFile)
-        if (existingResult != null) {
-            acceptResult(existingResult)
-        } else {
-            refresh()
+        if (isDisposed) return
+        val previewService = TypstPreviewService.getInstance(project)
+        val existingResult = previewService.statusFor(sourceFile)
+        val successfulResult = previewService.lastSuccessfulFor(sourceFile)
+        when {
+            existingResult == null -> refresh()
+            existingResult.isRunning -> {
+                successfulResult?.let(::acceptResult)
+                refresh()
+            }
+            existingResult.failureMessage != null -> {
+                successfulResult?.let(::acceptResult)
+                acceptResult(existingResult)
+            }
+            else -> acceptResult(existingResult)
         }
+    }
+
+    fun requestInitialPreview() {
+        if (isDisposed || hasRequestedInitialPreview) return
+        hasRequestedInitialPreview = true
+        showLatestOrRefresh()
+    }
+
+    fun onAdded() {
+        requestInitialPreview()
+        scheduleBridgeInjection()
+        showPendingPreviewSelection()
+    }
+
+    fun onSelected() {
+        if (hasDeselectedBoundPreview && sourceFile != editorFile) {
+            sourceFile = editorFile
+            pendingPreviewSelection = null
+            sourceMappingContext = null
+            hasDeselectedBoundPreview = false
+            showLatestOrRefresh()
+        }
+        onAdded()
+    }
+
+    fun onDeselected() {
+        if (sourceFile != editorFile) hasDeselectedBoundPreview = true
     }
 
     private fun acceptResult(result: TypstPreviewResult) {
@@ -194,9 +251,11 @@ internal class TypstPreviewPanel(
         if (currentPreviewUrl == previewUrl) {
             executeJavaScript("window.typstPreview?.refresh();window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
             previewPositionQuery?.let { query -> executeJavaScript(previewPositionBridgeScript(query)) }
+            showPendingPreviewSelection()
         } else {
             currentPreviewUrl = previewUrl
             browser?.loadURL(previewUrl)
+            scheduleBridgeInjection()
         }
         updatePreviewStatus(result)
     }
@@ -276,6 +335,29 @@ internal class TypstPreviewPanel(
         cefBrowser.executeJavaScript(script, cefBrowser.url, 0)
     }
 
+    private fun scheduleBridgeInjection() {
+        if (currentPreviewUrl == null) return
+        bridgeInjectionAlarm.cancelAllRequests()
+        for (delayMillis in BRIDGE_INJECTION_DELAYS_MILLIS) {
+            bridgeInjectionAlarm.addRequest(
+                {
+                    if (isDisposed || browser?.cefBrowser?.url != currentPreviewUrl) return@addRequest
+                    previewLinkQuery?.let { executeJavaScript(previewLinkBridgeScript(it)) }
+                    previewPositionQuery?.let { executeJavaScript(previewPositionBridgeScript(it)) }
+                    showPendingPreviewSelection()
+                },
+                delayMillis,
+            )
+        }
+    }
+
+    private fun showPendingPreviewSelection() {
+        val selection = pendingPreviewSelection ?: return
+        executeJavaScript(
+            "window.typstPreview?.showSelection(${selection.token},${selection.page},${selection.x},${selection.y})",
+        )
+    }
+
     private fun openPreviewLink(url: String): JBCefJSQuery.Response {
         val uri = runCatching { URI(url) }.getOrNull() ?: return JBCefJSQuery.Response("")
         if (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) {
@@ -301,20 +383,32 @@ internal class TypstPreviewPanel(
             x = x,
             y = y,
         ) { mappedPosition ->
-            if (!isDisposed && sourceMappingContext == context) navigateToSource(mappedPosition)
+            if (!isDisposed && sourceMappingContext == context) {
+                navigateToSource(mappedPosition, page, x, y)
+            }
         }
         return JBCefJSQuery.Response("")
     }
 
-    private fun navigateToSource(position: TypstRuntimeSourcePosition) {
+    private fun navigateToSource(
+        position: TypstRuntimeSourcePosition,
+        page: Int,
+        x: Double,
+        y: Double,
+    ) {
         val file = VirtualFileManager.getInstance().findFileByUrl(position.uri) ?: return
         val document = FileDocumentManager.getInstance().getDocument(file) ?: return
         if (document.lineCount == 0) return
         val startOffset = sourceOffset(document, position.line, position.column)
         val endOffset = sourceOffset(document, position.endLine, position.endColumn).coerceAtLeast(startOffset)
-        project.service<TypstPreviewBindingService>().bind(file, sourceFile)
+        val bindingService = project.service<TypstPreviewBindingService>()
+        val binding = bindingService.bind(file, sourceFile, page, x, y)
+        pendingPreviewSelection = binding.selection
+        showPendingPreviewSelection()
         val editor = FileEditorManager.getInstance(project)
-            .openTextEditor(OpenFileDescriptor(project, file, startOffset), true) ?: return
+            .openTextEditor(OpenFileDescriptor(project, file, startOffset), true)
+        bindingService.completeNavigation(file, binding)
+        editor ?: return
         editor.selectionModel.setSelection(startOffset, endOffset)
         editor.caretModel.moveToOffset(endOffset)
         editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
@@ -446,17 +540,17 @@ internal class TypstPreviewPanel(
     private companion object {
         const val MIN_PREVIEW_SCALE = 0.2
         const val MAX_PREVIEW_SCALE = 1.0
+        val BRIDGE_INJECTION_DELAYS_MILLIS = intArrayOf(100, 500, 1_500, 3_000, 5_000, 10_000, 20_000)
     }
 }
 
 internal class TypstPreviewFileEditor(
     project: Project,
     private val editorFile: VirtualFile,
-    previewSource: VirtualFile,
+    binding: TypstPreviewBinding,
 ) : UserDataHolderBase(), FileEditor {
-    private val previewPanel = TypstPreviewPanel(project, editorFile, previewSource)
+    private val previewPanel = TypstPreviewPanel(project, editorFile, binding)
     private val propertyChangeSupport = PropertyChangeSupport(this)
-    private var hasRequestedInitialPreview = false
 
     override fun getComponent() = previewPanel.component
 
@@ -481,32 +575,50 @@ internal class TypstPreviewFileEditor(
     override fun getFile(): VirtualFile = editorFile
 
     override fun selectNotify() {
-        if (!hasRequestedInitialPreview) {
-            hasRequestedInitialPreview = true
-            previewPanel.showLatestOrRefresh()
-        }
+        previewPanel.onSelected()
+    }
+
+    override fun deselectNotify() {
+        previewPanel.onDeselected()
     }
 
     override fun dispose() {
-        previewPanel.dispose()
+        Disposer.dispose(previewPanel)
     }
 }
 
 @Service(Service.Level.PROJECT)
 internal class TypstPreviewBindingService : Disposable {
-    private val previewSources = ConcurrentHashMap<String, VirtualFile>()
-    private val listeners = ConcurrentHashMap<String, MutableSet<(VirtualFile) -> Unit>>()
+    private val bindings = ConcurrentHashMap<String, TypstPreviewBinding>()
+    private val listeners = ConcurrentHashMap<String, MutableSet<(TypstPreviewBinding) -> Unit>>()
+    private val selectionSequence = AtomicLong()
 
-    fun previewSourceFor(editorFile: VirtualFile): VirtualFile =
-        previewSources[editorFile.url]?.takeIf(VirtualFile::isValid) ?: editorFile
+    fun bindingFor(editorFile: VirtualFile): TypstPreviewBinding =
+        bindings.remove(editorFile.url)?.takeIf { it.previewSource.isValid }
+            ?: TypstPreviewBinding(editorFile)
 
-    fun bind(editorFile: VirtualFile, previewSource: VirtualFile) {
-        if (!editorFile.isValid || !previewSource.isValid) return
-        previewSources[editorFile.url] = previewSource
-        listeners[editorFile.url]?.toList()?.forEach { listener -> listener(previewSource) }
+    fun bind(
+        editorFile: VirtualFile,
+        previewSource: VirtualFile,
+        page: Int,
+        x: Double,
+        y: Double,
+    ): TypstPreviewBinding {
+        if (!editorFile.isValid || !previewSource.isValid) return bindingFor(editorFile)
+        val binding = TypstPreviewBinding(
+            previewSource,
+            TypstPreviewSelection(selectionSequence.incrementAndGet(), page, x, y),
+        )
+        bindings[editorFile.url] = binding
+        listeners[editorFile.url]?.toList()?.forEach { listener -> listener(binding) }
+        return binding
     }
 
-    fun addListener(editorFile: VirtualFile, listener: (VirtualFile) -> Unit): () -> Unit {
+    fun completeNavigation(editorFile: VirtualFile, binding: TypstPreviewBinding) {
+        bindings.remove(editorFile.url, binding)
+    }
+
+    fun addListener(editorFile: VirtualFile, listener: (TypstPreviewBinding) -> Unit): () -> Unit {
         val fileListeners = listeners.computeIfAbsent(editorFile.url) { ConcurrentHashMap.newKeySet() }
         fileListeners.add(listener)
         return {
@@ -516,7 +628,19 @@ internal class TypstPreviewBindingService : Disposable {
     }
 
     override fun dispose() {
-        previewSources.clear()
+        bindings.clear()
         listeners.clear()
     }
 }
+
+internal data class TypstPreviewBinding(
+    val previewSource: VirtualFile,
+    val selection: TypstPreviewSelection? = null,
+)
+
+internal data class TypstPreviewSelection(
+    val token: Long,
+    val page: Int,
+    val x: Double,
+    val y: Double,
+)

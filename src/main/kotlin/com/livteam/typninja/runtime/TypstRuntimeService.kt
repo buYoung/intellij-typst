@@ -32,6 +32,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.io.BufferedWriter
+import java.io.IOException
 import java.net.URI
 import java.nio.file.Path
 import java.util.concurrent.ConcurrentHashMap
@@ -453,6 +454,10 @@ class TypstRuntimeService(
         readerJob = coroutineScope.launch(Dispatchers.IO) {
             try {
                 child.inputReader().useLines { lines -> lines.forEach(::acceptResponse) }
+            } catch (exception: IOException) {
+                if (!intentionalProcessStops.contains(child.pid()) && child.isAlive) {
+                    logger.warn("Failed to read from Typst runtime", exception)
+                }
             } finally {
                 val wasIntentional = intentionalProcessStops.remove(child.pid())
                 if (process === child) {
@@ -472,8 +477,14 @@ class TypstRuntimeService(
             }
         }
         coroutineScope.launch(Dispatchers.IO) {
-            child.errorStream.bufferedReader().useLines { lines ->
-                lines.forEach { logger.warn("typst-runtime: $it") }
+            try {
+                child.errorStream.bufferedReader().useLines { lines ->
+                    lines.forEach { logger.warn("typst-runtime: $it") }
+                }
+            } catch (exception: IOException) {
+                if (!intentionalProcessStops.contains(child.pid()) && child.isAlive) {
+                    logger.warn("Failed to read Typst runtime errors", exception)
+                }
             }
         }
     }
