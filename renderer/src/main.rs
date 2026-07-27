@@ -75,10 +75,16 @@ fn handle(workspaces: &mut HashMap<String, Workspace>, request: &Request) -> Res
         RequestMessage::Compile(params) => workspace_mut(workspaces, request)
             .and_then(|workspace| workspace.compile(request.generation, params.render))
             .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
-        RequestMessage::SourceToDocument(position) => {
-            let _ = (&position.uri, position.line, position.column);
-            Ok(json!({"mapped": false}))
-        }
+        RequestMessage::SourceToDocument(position) => workspace_mut(workspaces, request)
+            .and_then(|workspace| {
+                workspace.source_to_document(
+                    request.generation,
+                    &position.uri,
+                    position.line,
+                    position.column,
+                )
+            })
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
         RequestMessage::DocumentToSource(position) => workspace_mut(workspaces, request)
             .and_then(|workspace| {
                 workspace.document_to_source(

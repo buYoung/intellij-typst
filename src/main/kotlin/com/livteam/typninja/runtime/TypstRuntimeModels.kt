@@ -47,4 +47,12 @@ data class TypstRuntimeSourcePosition(
     val uri: String,
     val line: Int,
     val column: Int,
+    val endLine: Int = line,
+    val endColumn: Int = column,
+)
+
+data class TypstRuntimeDocumentPosition(
+    val page: Int,
+    val x: Double,
+    val y: Double,
 )

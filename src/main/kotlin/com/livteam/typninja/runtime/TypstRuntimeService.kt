@@ -101,12 +101,46 @@ class TypstRuntimeService(
                 uri = result.get("uri")?.asString ?: return@launch,
                 line = result.get("line")?.asInt ?: return@launch,
                 column = result.get("column")?.asInt ?: return@launch,
+                endLine = result.get("endLine")?.asInt ?: result.get("line")?.asInt ?: return@launch,
+                endColumn = result.get("endColumn")?.asInt ?: result.get("column")?.asInt ?: return@launch,
             )
             withContext(Dispatchers.EDT) { onMapped(position) }
         } catch (exception: CancellationException) {
             throw exception
         } catch (exception: Exception) {
             logger.debug("Failed to map Typst preview position to source", exception)
+        }
+    }
+
+    fun requestSourceToDocument(
+        source: VirtualFile,
+        documentVersion: Long,
+        runtimeGeneration: Long,
+        position: TypstRuntimeSourcePosition,
+        onMapped: (List<TypstRuntimeDocumentPosition>) -> Unit,
+    ): Job = coroutineScope.launch {
+        try {
+            val response = request(
+                source,
+                documentVersion,
+                runtimeGeneration,
+                "sourceToDocument",
+                mapOf("uri" to position.uri, "line" to position.line, "column" to position.column),
+            )
+            if (response.get("generation")?.asLong != runtimeGeneration ||
+                response.get("documentVersion")?.asLong != documentVersion
+            ) return@launch
+            val result = response.getAsJsonObject("result") ?: return@launch
+            if (result.get("mapped")?.asBoolean != true) return@launch
+            val positions = result.getAsJsonArray("positions")?.map {
+                gson.fromJson(it, TypstRuntimeDocumentPosition::class.java)
+            }.orEmpty()
+            if (positions.isEmpty()) return@launch
+            withContext(Dispatchers.EDT) { onMapped(positions) }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Failed to map Typst source position to preview", exception)
         }
     }
 

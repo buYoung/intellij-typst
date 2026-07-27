@@ -5,10 +5,16 @@ import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.fileEditor.FileEditor
+import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.fileEditor.OpenFileDescriptor
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.EditorFactory
+import com.intellij.openapi.editor.ScrollType
+import com.intellij.openapi.editor.event.EditorMouseEvent
+import com.intellij.openapi.editor.event.EditorMouseListener
 import com.intellij.openapi.util.UserDataHolderBase
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
@@ -19,6 +25,7 @@ import com.intellij.ui.jcef.JBCefJSQuery
 import com.intellij.util.concurrency.AppExecutorUtil
 import com.livteam.typninja.runtime.TypstRuntimeService
 import com.livteam.typninja.runtime.TypstRuntimeSourcePosition
+import com.livteam.typninja.language.TypstFileType
 import com.livteam.typninja.settings.TypstSettingsService
 import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
@@ -67,6 +74,8 @@ internal class TypstPreviewPanel(
     private var zoom = 1.0
     private var currentPage = 0
     private var pageCount = 0
+    private var currentPreviewUrl: String? = null
+    private var mouseSelectionBeforePress: MouseSelection? = null
     @Volatile
     private var sourceMappingContext: SourceMappingContext? = null
     @Volatile
@@ -87,6 +96,21 @@ internal class TypstPreviewPanel(
         }
         invertCheckBox.isSelected = TypstSettingsService.getInstance(project).state.invertPreviewColors
         removeServiceListener = TypstPreviewService.getInstance(project).addListener(::acceptResult)
+        EditorFactory.getInstance().eventMulticaster.addEditorMouseListener(
+            object : EditorMouseListener {
+                override fun mousePressed(event: EditorMouseEvent) {
+                    mouseSelectionBeforePress = selectionOf(event.editor)
+                }
+
+                override fun mouseReleased(event: EditorMouseEvent) {
+                    val selection = selectionOf(event.editor)
+                    val previous = mouseSelectionBeforePress
+                    mouseSelectionBeforePress = null
+                    if (selection != null && selection != previous) syncSourceSelection(event.editor, selection)
+                }
+            },
+            this,
+        )
     }
 
     private fun buildToolbar(): JPanel = JPanel(FlowLayout(FlowLayout.LEFT, 4, 2)).apply {
@@ -112,6 +136,15 @@ internal class TypstPreviewPanel(
             document?.text,
             document?.modificationStamp ?: sourceFile.modificationStamp,
         )
+    }
+
+    fun showLatestOrRefresh() {
+        val existingResult = TypstPreviewService.getInstance(project).statusFor(sourceFile)
+        if (existingResult != null) {
+            acceptResult(existingResult)
+        } else {
+            refresh()
+        }
     }
 
     private fun acceptResult(result: TypstPreviewResult) {
@@ -147,12 +180,19 @@ internal class TypstPreviewPanel(
         pageCount = result.pageCount
         currentPage = currentPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
         renderGeneration.incrementAndGet()
-        browser?.loadURL(result.previewUrl ?: return)
+        val previewUrl = result.previewUrl ?: return
+        if (currentPreviewUrl == previewUrl) {
+            executeJavaScript("window.typstPreview?.refresh();window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
+        } else {
+            currentPreviewUrl = previewUrl
+            browser?.loadURL(previewUrl)
+        }
         updatePreviewStatus(result)
     }
 
     private fun loadSvgPreview(result: TypstPreviewResult) {
         sourceMappingContext = null
+        currentPreviewUrl = null
         val generation = renderGeneration.incrementAndGet()
         val outputPaths = result.outputFiles.map { it.toNioPath() }
         AppExecutorUtil.getAppExecutorService().submit {
@@ -259,11 +299,47 @@ internal class TypstPreviewPanel(
         val file = VirtualFileManager.getInstance().findFileByUrl(position.uri) ?: return
         val document = FileDocumentManager.getInstance().getDocument(file) ?: return
         if (document.lineCount == 0) return
-        val line = position.line.coerceIn(0, document.lineCount - 1)
-        val lineStart = document.getLineStartOffset(line)
-        val lineEnd = document.getLineEndOffset(line)
-        val offset = (lineStart + position.column.coerceAtLeast(0)).coerceAtMost(lineEnd)
-        OpenFileDescriptor(project, file, offset).navigate(true)
+        val startOffset = sourceOffset(document, position.line, position.column)
+        val endOffset = sourceOffset(document, position.endLine, position.endColumn).coerceAtLeast(startOffset)
+        val editor = FileEditorManager.getInstance(project)
+            .openTextEditor(OpenFileDescriptor(project, file, startOffset), true) ?: return
+        editor.selectionModel.setSelection(startOffset, endOffset)
+        editor.caretModel.moveToOffset(endOffset)
+        editor.scrollingModel.scrollToCaret(ScrollType.CENTER)
+    }
+
+    private fun sourceOffset(document: com.intellij.openapi.editor.Document, line: Int, column: Int): Int {
+        val safeLine = line.coerceIn(0, document.lineCount - 1)
+        return (document.getLineStartOffset(safeLine) + column.coerceAtLeast(0))
+            .coerceAtMost(document.getLineEndOffset(safeLine))
+    }
+
+    private fun selectionOf(editor: Editor): MouseSelection? {
+        if (editor.project != project || editor.isDisposed || editor.virtualFile?.fileType != TypstFileType) return null
+        if (FileEditorManager.getInstance(project).selectedTextEditor !== editor) return null
+        val file = editor.virtualFile ?: return null
+        val caret = editor.caretModel.primaryCaret
+        return MouseSelection(file, caret.selectionStart, caret.selectionEnd, caret.offset)
+    }
+
+    private fun syncSourceSelection(editor: Editor, selection: MouseSelection) {
+        val context = sourceMappingContext ?: return
+        val document = editor.document
+        val offset = selection.caretOffset.coerceIn(0, document.textLength)
+        val line = document.getLineNumber(offset)
+        val column = offset - document.getLineStartOffset(line)
+        TypstRuntimeService.getInstance(project).requestSourceToDocument(
+            source = sourceFile,
+            documentVersion = context.documentVersion,
+            runtimeGeneration = context.runtimeGeneration,
+            position = TypstRuntimeSourcePosition(selection.file.url, line, column),
+        ) { positions ->
+            if (isDisposed || sourceMappingContext != context) return@requestSourceToDocument
+            val payload = positions.joinToString(prefix = "[", postfix = "]") {
+                "{page:${it.page},x:${it.x},y:${it.y}}"
+            }
+            executeJavaScript("window.typstPreview?.showPositions($payload)")
+        }
     }
 
     private fun previewLinkBridgeScript(query: JBCefJSQuery): String {
@@ -295,9 +371,21 @@ internal class TypstPreviewPanel(
             (() => {
               if (window.__typstPreviewPositionBridgeInstalled) return;
               window.__typstPreviewPositionBridgeInstalled = true;
+              let pointerStart = null;
+              document.addEventListener('pointerdown', event => {
+                pointerStart = {x:event.clientX,y:event.clientY};
+              }, true);
               document.addEventListener('click', event => {
-                const svg = event.target.closest?.('svg');
-                const page = svg?.closest?.('.page');
+                if (pointerStart && Math.hypot(event.clientX-pointerStart.x,event.clientY-pointerStart.y) > 4) {
+                  pointerStart = null;
+                  event.preventDefault();
+                  event.stopImmediatePropagation();
+                  return;
+                }
+                pointerStart = null;
+                if (event.target.closest?.('a,[data-target-page]')) return;
+                const page = event.target.closest?.('.page');
+                const svg = page?.querySelector?.('svg');
                 const matrix = svg?.getScreenCTM?.();
                 const pageNumber = Number(page?.dataset?.page);
                 if (!svg || !matrix || !Number.isInteger(pageNumber) || pageNumber < 1) return;
@@ -332,6 +420,13 @@ internal class TypstPreviewPanel(
     private data class SourceMappingContext(
         val runtimeGeneration: Long,
         val documentVersion: Long,
+    )
+
+    private data class MouseSelection(
+        val file: VirtualFile,
+        val startOffset: Int,
+        val endOffset: Int,
+        val caretOffset: Int,
     )
 
     private companion object {
@@ -373,7 +468,7 @@ internal class TypstPreviewFileEditor(
     override fun selectNotify() {
         if (!hasRequestedInitialPreview) {
             hasRequestedInitialPreview = true
-            previewPanel.refresh()
+            previewPanel.showLatestOrRefresh()
         }
     }
 
