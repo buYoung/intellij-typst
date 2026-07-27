@@ -1,7 +1,5 @@
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::thread;
 
@@ -36,10 +34,9 @@ impl PreviewServer {
         &self.url
     }
 
-    pub fn update_from_files(&self, files: &[PathBuf]) -> std::io::Result<()> {
+    pub fn update(&self, svg_pages: &[String]) -> std::io::Result<()> {
         let mut pages = String::new();
-        for (index, file) in files.iter().enumerate() {
-            let svg = fs::read_to_string(file)?;
+        for (index, svg) in svg_pages.iter().enumerate() {
             pages.push_str(&format!(
                 "<section class=\"page\" data-page=\"{}\">{}</section>",
                 index + 1,
@@ -112,6 +109,7 @@ let scale=1; const pages=document.getElementById('pages');
 window.typstPreview={{
  setScale:v=>{{scale=Math.max(.2,Math.min(1,Number(v)||1));pages.style.setProperty('--preview-scale',scale);save()}},
  setInvert:v=>{{document.body.classList.toggle('invert',!!v);save()}},
+ showPage:n=>document.querySelector('.page[data-page="'+n+'"]')?.scrollIntoView({{block:'start'}}),
  state:()=>({{scale,scrollY:window.scrollY}}),
  restore:s=>{{if(s){{window.typstPreview.setScale(s.scale||1);scrollTo(0,s.scrollY||0)}}}}
 }};
@@ -135,30 +133,4 @@ fn token(workspace_id: &str) -> String {
             .to_le_bytes(),
     );
     format!("{:x}", hasher.finalize())[..32].to_owned()
-}
-
-pub fn find_svg_pages(pattern: &Path) -> std::io::Result<Vec<PathBuf>> {
-    let file_name = pattern
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or_default();
-    if !file_name.contains("{p}") {
-        return Ok(if pattern.exists() {
-            vec![pattern.to_owned()]
-        } else {
-            Vec::new()
-        });
-    }
-    let (prefix, suffix) = file_name.split_once("{p}").unwrap_or_default();
-    let mut pages = fs::read_dir(pattern.parent().unwrap_or_else(|| Path::new(".")))?
-        .filter_map(Result::ok)
-        .map(|entry| entry.path())
-        .filter(|path| {
-            path.file_name()
-                .and_then(|name| name.to_str())
-                .is_some_and(|name| name.starts_with(prefix) && name.ends_with(suffix))
-        })
-        .collect::<Vec<_>>();
-    pages.sort();
-    Ok(pages)
 }

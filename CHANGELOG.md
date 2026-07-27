@@ -4,7 +4,7 @@
 
 ## [Unreleased]
 ### Added
-- Project-scoped Typst runtime protocol v1 with versioned request correlation, open-document overlays, compiler diagnostics, secure `@preview` package installation, and an editor-integrated JCEF SVG preview with Swing PNG fallback.
+- Project-scoped Typst runtime protocol v1 with versioned request correlation, open-document overlays, compiler diagnostics, secure `@preview` package installation, and an editor-integrated responsive JCEF SVG preview with click-to-source navigation.
 - Typst files now use the IntelliJ editor/preview/split surface instead of a separate preview Tool Window.
 - Parse single discarded-parameter closures such as `_ => value` without false syntax errors.
 - Resolve the Typst standard-library `range` function globally as well as through `array.range`.

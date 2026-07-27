@@ -27,8 +27,12 @@ class TypstPreviewAction : AnAction() {
     override fun actionPerformed(event: AnActionEvent) {
         val project = event.project ?: return
         val file = event.getData(CommonDataKeys.VIRTUAL_FILE) ?: return
-        val currentText = FileDocumentManager.getInstance().getDocument(file)?.text
-        TypstPreviewService.getInstance(project).preview(file, currentText)
+        val document = FileDocumentManager.getInstance().getDocument(file)
+        TypstPreviewService.getInstance(project).preview(
+            file,
+            document?.text,
+            document?.modificationStamp ?: file.modificationStamp,
+        )
         (FileEditorManager.getInstance(project).getSelectedEditor(file) as? TextEditorWithPreview)
             ?.setLayout(TextEditorWithPreview.Layout.SHOW_EDITOR_AND_PREVIEW)
     }

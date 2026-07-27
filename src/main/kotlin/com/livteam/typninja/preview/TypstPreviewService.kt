@@ -17,6 +17,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
@@ -42,6 +43,9 @@ data class TypstPreviewResult(
     val durationMillis: Long? = null,
     val previewUrl: String? = null,
     val sourceMappingAvailable: Boolean = false,
+    val runtimeGeneration: Long? = null,
+    val documentVersion: Long? = null,
+    val pageCount: Int = outputFiles.size,
 ) {
     val outputFile: VirtualFile? get() = outputFiles.firstOrNull()
 }
@@ -57,6 +61,7 @@ class TypstPreviewService(
     private val previewDirectories = ConcurrentHashMap.newKeySet<Path>()
     private val activeProcesses = ConcurrentHashMap<String, Process>()
     private val activeJobs = ConcurrentHashMap<String, Job>()
+    private val activeRequests = ConcurrentHashMap<String, CompilationRequest>()
     private val latestResults = ConcurrentHashMap<String, TypstPreviewResult>()
 
     fun addListener(listener: (TypstPreviewResult) -> Unit): () -> Unit {
@@ -67,7 +72,7 @@ class TypstPreviewService(
     fun statusFor(source: VirtualFile?): TypstPreviewResult? = source?.path?.let(latestResults::get)
 
     fun preview(source: VirtualFile, unsavedText: String? = null, documentVersion: Long = source.modificationStamp) =
-        compile(source, "png", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
+        compile(source, "svg", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
 
     fun export(source: VirtualFile, format: String, destination: Path, unsavedText: String? = null) =
         compile(source, format, destination, unsavedText, "export:$format", source.modificationStamp)
@@ -85,13 +90,22 @@ class TypstPreviewService(
             publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource, "Unsupported Typst export format"))
             return
         }
+        val request = CompilationRequest(
+            sourcePath = changedSource.path,
+            format = normalizedFormat,
+            destination = destination,
+            unsavedText = unsavedText,
+            documentVersion = documentVersion,
+        )
+        if (activeJobs[channel]?.isActive == true && activeRequests[channel] == request) return
         val generationCounter = channelGenerations.computeIfAbsent(channel) { AtomicLong() }
         val generation = generationCounter.incrementAndGet()
         activeJobs.remove(channel)?.cancel()
         activeProcesses.remove(channel)?.destroyForcibly()
         publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource, isRunning = true))
 
-        activeJobs[channel] = coroutineScope.launch {
+        activeRequests[channel] = request
+        val job = coroutineScope.launch(start = CoroutineStart.LAZY) {
             val startedAt = System.nanoTime()
             val capability = TypstToolchainService.getInstance(project).awaitCapability()
             if (!capability.isValid || capability.executablePath == null) {
@@ -116,6 +130,9 @@ class TypstPreviewService(
                         durationMillis = elapsedMillis(startedAt),
                         previewUrl = runtimeResult.previewUrl,
                         sourceMappingAvailable = runtimeResult.sourceMappingAvailable,
+                        runtimeGeneration = runtimeResult.generation,
+                        documentVersion = runtimeResult.documentVersion,
+                        pageCount = runtimeResult.pages.size,
                     ))
                     return@launch
                 }
@@ -166,8 +183,11 @@ class TypstPreviewService(
             } finally {
                 overlay?.let { withContext(Dispatchers.IO) { deleteDirectory(it.root) } }
                 if (channelGenerations[channel]?.get() == generation) activeJobs.remove(channel)
+                if (channelGenerations[channel]?.get() == generation) activeRequests.remove(channel, request)
             }
         }
+        activeJobs[channel] = job
+        job.start()
     }
 
     private fun buildCommand(
@@ -330,6 +350,7 @@ class TypstPreviewService(
         activeProcesses.values.forEach(Process::destroyForcibly)
         previewDirectories.forEach(::deleteDirectory)
         activeJobs.clear()
+        activeRequests.clear()
         activeProcesses.clear()
         previewDirectories.clear()
         latestResults.clear()
@@ -348,6 +369,13 @@ class TypstPreviewService(
 
     private data class CompilationOverlay(val root: Path, val entrypoint: Path)
     private data class CommandResult(val exitCode: Int, val output: String, val error: String)
+    private data class CompilationRequest(
+        val sourcePath: String,
+        val format: String,
+        val destination: Path?,
+        val unsavedText: String?,
+        val documentVersion: Long,
+    )
 
     companion object {
         private const val PREVIEW_CHANNEL = "preview"

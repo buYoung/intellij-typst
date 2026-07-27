@@ -42,3 +42,9 @@ data class TypstRuntimeCompileResult(
     val sourceMappingAvailable: Boolean,
     val previewUrl: String?,
 )
+
+data class TypstRuntimeSourcePosition(
+    val uri: String,
+    val line: Int,
+    val column: Int,
+)

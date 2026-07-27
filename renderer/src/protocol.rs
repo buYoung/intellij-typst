@@ -34,7 +34,8 @@ pub enum RequestMessage {
 pub struct InitializeParams {
     pub root_uri: String,
     pub main_uri: String,
-    pub typst_executable: String,
+    #[serde(rename = "typstExecutable")]
+    pub _typst_executable: String,
     #[serde(default)]
     pub font_paths: Vec<String>,
     #[serde(default = "default_true")]

@@ -79,10 +79,16 @@ fn handle(workspaces: &mut HashMap<String, Workspace>, request: &Request) -> Res
             let _ = (&position.uri, position.line, position.column);
             Ok(json!({"mapped": false}))
         }
-        RequestMessage::DocumentToSource(position) => {
-            let _ = (position.page, position.x, position.y);
-            Ok(json!({"mapped": false}))
-        }
+        RequestMessage::DocumentToSource(position) => workspace_mut(workspaces, request)
+            .and_then(|workspace| {
+                workspace.document_to_source(
+                    request.generation,
+                    position.page,
+                    position.x,
+                    position.y,
+                )
+            })
+            .and_then(|result| serde_json::to_value(result).map_err(|error| error.to_string())),
         RequestMessage::PackageIndex(params) => {
             package::fetch_text(&params.index_url, params.max_bytes)
                 .map(|text| json!({"index": text}))

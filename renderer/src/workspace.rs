@@ -1,24 +1,72 @@
-use crate::preview::{find_svg_pages, PreviewServer};
+use crate::preview::PreviewServer;
 use crate::protocol::InitializeParams;
 use serde::Serialize;
-use std::collections::HashMap;
-use std::fs;
+use std::num::NonZeroUsize;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
-use tempfile::TempDir;
+use tinymist_world::args::{CompileFontArgs, CompileOnceArgs, CompilePackageArgs};
+use tinymist_world::{ShadowApi, TypstSystemUniverse, TypstSystemWorld};
+use typst::foundations::Bytes;
+use typst::introspection::PagedPosition;
+use typst::layout::{Abs, Point};
+use typst::{World, WorldExt};
+use typst_ide::{jump_from_click, IdeWorld, Jump};
+use typst_layout::PagedDocument;
 use url::Url;
 
 pub struct Workspace {
     root: PathBuf,
-    main: PathBuf,
-    typst_executable: String,
-    font_paths: Vec<String>,
-    use_system_fonts: bool,
-    package_path: Option<String>,
     package_cache_path: Option<String>,
-    overlays: HashMap<PathBuf, String>,
     preview: PreviewServer,
     latest_generation: u64,
+    universe: TypstSystemUniverse,
+    latest_document: Option<CompiledDocument>,
+}
+
+struct CompiledDocument {
+    generation: u64,
+    world: MappingWorld,
+    document: PagedDocument,
+}
+
+struct MappingWorld(TypstSystemWorld);
+
+impl World for MappingWorld {
+    fn library(&self) -> &typst::utils::LazyHash<typst::Library> {
+        self.0.library()
+    }
+
+    fn book(&self) -> &typst::utils::LazyHash<typst::text::FontBook> {
+        self.0.book()
+    }
+
+    fn main(&self) -> typst::syntax::FileId {
+        self.0.main()
+    }
+
+    fn source(&self, id: typst::syntax::FileId) -> typst::diag::FileResult<typst::syntax::Source> {
+        self.0.source(id)
+    }
+
+    fn file(&self, id: typst::syntax::FileId) -> typst::diag::FileResult<Bytes> {
+        self.0.file(id)
+    }
+
+    fn font(&self, index: usize) -> Option<typst::text::Font> {
+        self.0.font(index)
+    }
+
+    fn today(
+        &self,
+        offset: Option<typst::foundations::Duration>,
+    ) -> Option<typst::foundations::Datetime> {
+        self.0.today(offset)
+    }
+}
+
+impl IdeWorld for MappingWorld {
+    fn upcast(&self) -> &dyn World {
+        self
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -52,6 +100,29 @@ pub struct Page {
     pub height: Option<f64>,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DocumentSource {
+    pub mapped: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub uri: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub line: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub column: Option<u32>,
+}
+
+impl DocumentSource {
+    fn unmapped() -> Self {
+        Self {
+            mapped: false,
+            uri: None,
+            line: None,
+            column: None,
+        }
+    }
+}
+
 impl Workspace {
     pub fn new(workspace_id: &str, params: InitializeParams) -> Result<Self, String> {
         let root = uri_to_path(&params.root_uri)?;
@@ -59,17 +130,14 @@ impl Workspace {
         if !main.starts_with(&root) {
             return Err("main file must be inside the configured root".to_owned());
         }
+        let universe = create_universe(&root, &main, &params)?;
         Ok(Self {
             root,
-            main,
-            typst_executable: params.typst_executable,
-            font_paths: params.font_paths,
-            use_system_fonts: params.use_system_fonts,
-            package_path: params.package_path,
             package_cache_path: params.package_cache_path,
-            overlays: HashMap::new(),
             preview: PreviewServer::start(workspace_id).map_err(|error| error.to_string())?,
             latest_generation: 0,
+            universe,
+            latest_document: None,
         })
     }
 
@@ -80,10 +148,14 @@ impl Workspace {
         }
         match text {
             Some(text) => {
-                self.overlays.insert(path, text);
+                self.universe
+                    .map_shadow(&path, Bytes::from_string(text))
+                    .map_err(|error| error.to_string())?;
             }
             None => {
-                self.overlays.remove(&path);
+                self.universe
+                    .unmap_shadow(&path)
+                    .map_err(|error| error.to_string())?;
             }
         }
         Ok(())
@@ -100,81 +172,128 @@ impl Workspace {
             });
         }
         self.latest_generation = generation;
-        let overlay = self.create_overlay()?;
-        let compile_root = overlay.as_ref().map_or(self.root.as_path(), TempDir::path);
-        let relative_main = self
-            .main
-            .strip_prefix(&self.root)
-            .map_err(|error| error.to_string())?;
-        let compile_main = compile_root.join(relative_main);
-        let output_directory = tempfile::tempdir().map_err(|error| error.to_string())?;
-        let output_pattern = output_directory.path().join("preview-{p}.svg");
-
-        let mut command = Command::new(&self.typst_executable);
-        command
-            .current_dir(compile_root)
-            .args(["compile", "--diagnostic-format", "short", "--root"])
-            .arg(compile_root);
-        for font_path in &self.font_paths {
-            command.args(["--font-path", font_path]);
-        }
-        if !self.use_system_fonts {
-            command.arg("--ignore-system-fonts");
-        }
-        if let Some(path) = self.package_path.as_deref().filter(|path| !path.is_empty()) {
-            command.args(["--package-path", path]);
-        }
-        if let Some(path) = self
-            .package_cache_path
-            .as_deref()
-            .filter(|path| !path.is_empty())
-        {
-            command.args(["--package-cache-path", path]);
-        }
-        command
-            .args(["--format", "svg"])
-            .arg(&compile_main)
-            .arg(&output_pattern)
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-        let output = command.output().map_err(|error| error.to_string())?;
-        if generation != self.latest_generation {
-            return Ok(CompileResult {
-                output_status: "cancelled",
-                diagnostics: Vec::new(),
-                pages: Vec::new(),
-                source_mapping_available: false,
-                preview_url: None,
-            });
-        }
-
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        let diagnostics = parse_short_diagnostics(&stderr, compile_root, &self.root);
-        let files = find_svg_pages(&output_pattern).map_err(|error| error.to_string())?;
-        if output.status.success() && render {
+        let world = MappingWorld(self.universe.snapshot());
+        let compiled = typst::compile::<PagedDocument>(&world);
+        let mut diagnostics = compiled
+            .warnings
+            .iter()
+            .filter_map(|diagnostic| native_diagnostic(&world, diagnostic))
+            .collect::<Vec<_>>();
+        let document = match compiled.output {
+            Ok(document) => document,
+            Err(errors) => {
+                diagnostics.extend(
+                    errors
+                        .iter()
+                        .filter_map(|diagnostic| native_diagnostic(&world, diagnostic)),
+                );
+                return Ok(CompileResult {
+                    output_status: "failed",
+                    diagnostics,
+                    pages: Vec::new(),
+                    source_mapping_available: false,
+                    preview_url: None,
+                });
+            }
+        };
+        if render {
+            let svg_options = typst_svg::SvgOptions::default();
+            let svg_pages = document
+                .pages()
+                .iter()
+                .map(|page| typst_svg::svg(page, &svg_options))
+                .collect::<Vec<_>>();
             self.preview
-                .update_from_files(&files)
+                .update(&svg_pages)
                 .map_err(|error| error.to_string())?;
         }
-        let pages = files
-            .iter()
-            .enumerate()
-            .map(|(index, _)| Page {
-                number: index as u32 + 1,
-                width: None,
-                height: None,
-            })
-            .collect();
+        let pages = if render {
+            document
+                .pages()
+                .iter()
+                .enumerate()
+                .map(|(index, page)| Page {
+                    number: index as u32 + 1,
+                    width: Some(page.frame.size().x.to_pt()),
+                    height: Some(page.frame.size().y.to_pt()),
+                })
+                .collect()
+        } else {
+            Vec::new()
+        };
+        if render {
+            self.latest_document = Some(CompiledDocument {
+                generation,
+                world,
+                document,
+            });
+        }
         Ok(CompileResult {
-            output_status: if output.status.success() {
-                "success"
-            } else {
-                "failed"
-            },
+            output_status: "success",
             diagnostics,
             pages,
-            source_mapping_available: false,
-            preview_url: (output.status.success() && render).then(|| self.preview.url().to_owned()),
+            source_mapping_available: render,
+            preview_url: render.then(|| self.preview.url().to_owned()),
+        })
+    }
+
+    pub fn document_to_source(
+        &self,
+        generation: u64,
+        page: u32,
+        x: f64,
+        y: f64,
+    ) -> Result<DocumentSource, String> {
+        let Some(compiled) = self.latest_document.as_ref() else {
+            return Ok(DocumentSource::unmapped());
+        };
+        if compiled.generation != generation {
+            return Ok(DocumentSource::unmapped());
+        }
+        let page =
+            NonZeroUsize::new(page as usize).ok_or_else(|| "page must start at 1".to_owned())?;
+        let position = PagedPosition {
+            page,
+            point: Point::new(Abs::pt(x), Abs::pt(y)),
+        };
+        let Some(Jump::File(file_id, byte_offset)) =
+            jump_from_click(&compiled.world, &compiled.document, &position)
+        else {
+            return Ok(DocumentSource::unmapped());
+        };
+        let source = compiled
+            .world
+            .source(file_id)
+            .map_err(|error| error.to_string())?;
+        let line = source
+            .lines()
+            .byte_to_line(byte_offset)
+            .ok_or_else(|| "source byte offset is outside the file".to_owned())?;
+        let utf16_offset = source
+            .lines()
+            .byte_to_utf16(byte_offset)
+            .ok_or_else(|| "source byte offset is not a UTF-8 boundary".to_owned())?;
+        let line_byte_offset = source
+            .lines()
+            .line_to_byte(line)
+            .ok_or_else(|| "source line is outside the file".to_owned())?;
+        let line_utf16_offset = source.lines().byte_to_utf16(line_byte_offset).unwrap_or(0);
+        let path = compiled
+            .world
+            .0
+            .path_for_id(file_id)
+            .map_err(|error| error.to_string())?;
+        Ok(DocumentSource {
+            mapped: true,
+            uri: Some(
+                Url::from_file_path(path.as_path())
+                    .map_err(|_| {
+                        "mapped source path cannot be represented as a file URI".to_owned()
+                    })?
+                    .to_string(),
+            ),
+            line: Some(line as u32),
+            column: Some((utf16_offset - line_utf16_offset) as u32),
         })
     }
 
@@ -185,53 +304,70 @@ impl Workspace {
             .map(PathBuf::from)
             .unwrap_or_else(default_package_cache)
     }
-
-    fn create_overlay(&self) -> Result<Option<TempDir>, String> {
-        if self.overlays.is_empty() {
-            return Ok(None);
-        }
-        let directory = tempfile::tempdir().map_err(|error| error.to_string())?;
-        mirror_tree(&self.root, directory.path())?;
-        for (source, text) in &self.overlays {
-            let relative = source
-                .strip_prefix(&self.root)
-                .map_err(|error| error.to_string())?;
-            let destination = directory.path().join(relative);
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-            }
-            fs::write(destination, text).map_err(|error| error.to_string())?;
-        }
-        Ok(Some(directory))
-    }
 }
 
-fn mirror_tree(source: &Path, destination: &Path) -> Result<(), String> {
-    fs::create_dir_all(destination).map_err(|error| error.to_string())?;
-    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
-        let entry = entry.map_err(|error| error.to_string())?;
-        let source_path = entry.path();
-        if source_path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name.starts_with(".typst-runtime-preview"))
-        {
-            continue;
-        }
-        let destination_path = destination.join(entry.file_name());
-        if entry
-            .file_type()
-            .map_err(|error| error.to_string())?
-            .is_dir()
-        {
-            mirror_tree(&source_path, &destination_path)?;
-        } else {
-            fs::copy(&source_path, &destination_path).map_err(|error| error.to_string())?;
-        }
-    }
-    Ok(())
+fn create_universe(
+    root: &Path,
+    main: &Path,
+    params: &InitializeParams,
+) -> Result<TypstSystemUniverse, String> {
+    let args = CompileOnceArgs {
+        input: Some(main.to_string_lossy().into_owned()),
+        root: Some(root.to_path_buf()),
+        font: CompileFontArgs {
+            font_paths: params.font_paths.iter().map(PathBuf::from).collect(),
+            ignore_system_fonts: !params.use_system_fonts,
+        },
+        package: CompilePackageArgs {
+            package_path: params
+                .package_path
+                .as_deref()
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+            package_cache_path: params
+                .package_cache_path
+                .as_deref()
+                .filter(|path| !path.is_empty())
+                .map(PathBuf::from),
+        },
+        ..CompileOnceArgs::default()
+    };
+    args.resolve_system().map_err(|error| error.to_string())
 }
 
+fn native_diagnostic(
+    world: &MappingWorld,
+    diagnostic: &typst::diag::SourceDiagnostic,
+) -> Option<Diagnostic> {
+    let file_id = diagnostic.span.id()?;
+    let source = world.source(file_id).ok()?;
+    let range = world.range(diagnostic.span)?;
+    let start_line = source.lines().byte_to_line(range.start)?;
+    let end_line = source.lines().byte_to_line(range.end)?;
+    let start_line_byte = source.lines().line_to_byte(start_line)?;
+    let end_line_byte = source.lines().line_to_byte(end_line)?;
+    let start_column = source.lines().byte_to_utf16(range.start)?
+        - source.lines().byte_to_utf16(start_line_byte)?;
+    let end_column =
+        source.lines().byte_to_utf16(range.end)? - source.lines().byte_to_utf16(end_line_byte)?;
+    let path = world.0.path_for_id(file_id).ok()?;
+    let uri = Url::from_file_path(path.as_path()).ok()?.to_string();
+    Some(Diagnostic {
+        severity: match diagnostic.severity {
+            typst::diag::Severity::Error => "error",
+            typst::diag::Severity::Warning => "warning",
+        },
+        message: diagnostic.message.to_string(),
+        uri,
+        start_line: start_line as u32,
+        start_column: start_column as u32,
+        end_line: end_line as u32,
+        end_column: end_column as u32,
+        trace: Vec::new(),
+    })
+}
+
+#[cfg(test)]
 fn parse_short_diagnostics(
     stderr: &str,
     compile_root: &Path,

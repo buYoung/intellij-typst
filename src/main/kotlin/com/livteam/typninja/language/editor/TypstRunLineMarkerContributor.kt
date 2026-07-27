@@ -28,8 +28,12 @@ class TypstRunLineMarkerContributor : RunLineMarkerContributor(), DumbAware {
         val virtualFile = file.virtualFile ?: return null
         val preview = object : AnAction("Preview Typst", "Refresh the Typst preview", AllIcons.Actions.Execute) {
             override fun actionPerformed(event: AnActionEvent) {
-                val currentText = FileDocumentManager.getInstance().getDocument(virtualFile)?.text
-                TypstPreviewService.getInstance(file.project).preview(virtualFile, currentText)
+                val document = FileDocumentManager.getInstance().getDocument(virtualFile)
+                TypstPreviewService.getInstance(file.project).preview(
+                    virtualFile,
+                    document?.text,
+                    document?.modificationStamp ?: virtualFile.modificationStamp,
+                )
                 (FileEditorManager.getInstance(file.project).getSelectedEditor(virtualFile) as? TextEditorWithPreview)
                     ?.setLayout(TextEditorWithPreview.Layout.SHOW_EDITOR_AND_PREVIEW)
             }

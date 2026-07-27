@@ -75,6 +75,41 @@ class TypstRuntimeService(
             compile(source, unsavedText, render, documentVersion)
         }
 
+    fun requestDocumentToSource(
+        source: VirtualFile,
+        documentVersion: Long,
+        runtimeGeneration: Long,
+        page: Int,
+        x: Double,
+        y: Double,
+        onMapped: (TypstRuntimeSourcePosition) -> Unit,
+    ): Job = coroutineScope.launch {
+        try {
+            val response = request(
+                source,
+                documentVersion,
+                runtimeGeneration,
+                "documentToSource",
+                mapOf("page" to page, "x" to x, "y" to y),
+            )
+            if (response.get("generation")?.asLong != runtimeGeneration ||
+                response.get("documentVersion")?.asLong != documentVersion
+            ) return@launch
+            val result = response.getAsJsonObject("result") ?: return@launch
+            if (result.get("mapped")?.asBoolean != true) return@launch
+            val position = TypstRuntimeSourcePosition(
+                uri = result.get("uri")?.asString ?: return@launch,
+                line = result.get("line")?.asInt ?: return@launch,
+                column = result.get("column")?.asInt ?: return@launch,
+            )
+            withContext(Dispatchers.EDT) { onMapped(position) }
+        } catch (exception: CancellationException) {
+            throw exception
+        } catch (exception: Exception) {
+            logger.debug("Failed to map Typst preview position to source", exception)
+        }
+    }
+
     suspend fun compile(
         source: VirtualFile,
         unsavedText: String?,

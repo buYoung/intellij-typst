@@ -62,7 +62,7 @@ Typst Runtime Services is a project-scoped auxiliary runtime for compiler diagno
 - 저장 및 입력 중 실제 컴파일 진단을 정확한 문서 세대에 연결한다.
 - 열린 Typst 문서의 메모리 내용을 하나의 컴파일 오버레이로 반영한다.
 - 완성된 `@preview` import를 안전하게 자동 확보하고 로컬 언어 서비스에 연결한다.
-- Typst 파일 편집기 안에서 소스·미리보기·분할 모드를 제공한다. JCEF 가능 환경에서는 SVG를 표시하고, 불가능한 환경에서는 기존 PNG 보기를 유지한다.
+- Typst 파일 편집기 안에서 소스·미리보기·분할 모드를 제공한다. JCEF 가능 환경에서는 링크 정보를 유지하는 반응형 SVG를 표시하고, 불가능한 환경에서는 명시적인 비활성 상태를 표시한다.
 - 다운로드, 호환성, 충돌 실패가 네이티브 PSI 기능을 중단시키지 않게 한다.
 
 ### Non-Goals
@@ -99,7 +99,7 @@ Typst Runtime Services is a project-scoped auxiliary runtime for compiler diagno
 | Existing Feature | Relationship |
 | ---------------- | ------------ |
 | Typst Native Language Services | 대체하지 않고 실제 컴파일 결과와 패키지 설치 상태를 보완한다. |
-| Typst CLI Preview and Export | 런타임 실패, JCEF 미지원, 내보내기, 추가 CLI 인자 사용 시 대체 경로로 유지한다. |
+| Typst CLI Preview and Export | 런타임 실패 시 SVG 미리보기, 내보내기, 추가 CLI 인자 사용 시 대체 경로로 유지한다. |
 | Local Package Catalog | 설치 완료 후 갱신되어 패키지 내부 이동과 완성을 활성화한다. |
 | Typst Settings | 기존 루트, 메인 파일, 글꼴, 시스템 글꼴, 패키지 경로를 공유하며 새 정책 설정을 추가한다. |
 
@@ -143,7 +143,7 @@ Typst Runtime Services is a project-scoped auxiliary runtime for compiler diagno
 - 초기화, 소스 갱신, 컴파일, 양방향 위치 질의, 패키지 색인, 패키지 확보, 종료 연산을 구분한다.
 - 추가 CLI 인자가 있으면 런타임이 이를 조용히 버리지 않고 기존 CLI 경로를 사용한다.
 - 컴파일 실패 중에는 마지막 성공 미리보기를 지우지 않고 새 오류 상태만 표시한다.
-- JCEF가 없으면 기존 Swing PNG 보기를 사용한다.
+- JCEF가 없으면 미리보기를 사용할 수 없다는 명시적인 상태를 표시한다.
 - 위치 매핑이 검증되지 않은 결과는 `mapped=false`로 표시하고 이동 동작을 수행하지 않는다.
 
 ### 8.2 Conceptual Data Model
@@ -161,7 +161,7 @@ Typst Runtime Services is a project-scoped auxiliary runtime for compiler diagno
 | generation | 오래된 컴파일 결과를 폐기하는 번호 |
 | documentVersion | IDE 문서와 결과의 일치 여부 |
 | outputStatus | 성공, 실패, 취소 상태 |
-| sourceMappingAvailable | 양방향 이동을 제공해도 되는지 여부 |
+| sourceMappingAvailable | 해당 렌더 결과에서 미리보기 클릭을 소스 위치로 연결해도 되는지 여부 |
 | previewUrl | 루프백 토큰 URL |
 
 ### 8.3 Failure Handling
@@ -268,7 +268,7 @@ Why not chosen:
 ### 11.5 Accessibility
 
 - 진단은 IDE 표준 심각도와 텍스트 메시지를 사용해 색상만으로 의미를 전달하지 않는다.
-- JCEF가 없는 환경에도 Swing 미리보기 대체 화면을 제공한다.
+- JCEF가 없는 환경에도 미리보기 비활성 원인을 텍스트로 제공한다.
 
 ### 11.6 Internationalization
 
@@ -285,7 +285,7 @@ Why not chosen:
 - 프로토콜 버전 1과 프로젝트 수명주기
 - 저장 및 입력 중 컴파일 진단, 열린 문서 오버레이, CLI 진단 대체 경로
 - `@preview` 색인과 안전한 자동 패키지 설치
-- JCEF SVG 보기와 Swing PNG 대체 화면
+- JCEF SVG 보기와 CLI SVG 대체 컴파일
 - 기존 내보내기 계약
 
 ### Out of Scope for as implemented (2026-07-25)
@@ -306,8 +306,8 @@ Why not chosen:
 
 ### Open Questions
 
-- 현재 양방향 소스 매핑 연산은 안전하게 매핑 불가를 반환한다. Reflexo 컴파일 문서의 실제 `Span`과 페이지 좌표 연결을 완료하기 전에는 이동 기능을 활성화하지 않는다.
-- 현재 런타임 컴파일 경로는 구성된 Typst 실행 파일을 호출한다. Reflexo 컴파일 세계를 직접 최종 소비자로 전환하는 호환성 작업이 남아 있다.
+- 미리보기에서 소스로의 이동은 Typst `PagedDocument`의 실제 `Span`과 클릭 좌표를 사용한다. 반대 방향인 소스에서 미리보기로의 위치 질의는 아직 안전하게 매핑 불가를 반환한다.
+- 런타임 컴파일 경로는 Typst `0.15.0` 라이브러리와 시스템 작업 공간을 직접 사용한다. 추가 CLI 인자가 설정된 경우에는 기존 CLI 경로를 유지한다.
 - 변경 페이지만 전송하는 증분 프로토콜은 현재 미리보기 상태 보존 경계 위에서 후속 구현이 필요하다.
 - `reflexo-* 0.8.0-rc3`의 공개 소스는 Typst `0.15.0`과 `0.15.1` 모두에서 비공개 PDF API를 요구해 직접 렌더 기능을 활성화할 수 없다. 정확한 버전은 선택 의존성으로 고정했지만 현재 실행 경로에는 포함되지 않는 알려진 편차다.
 
@@ -333,7 +333,7 @@ Apple Silicon과 Intel 바이너리를 별도 릴리스 자산으로 제공하�
 
 ### 14.5 IntelliJ 편집기와 JCEF
 
-Typst 파일은 별도 Tool Window가 아니라 IntelliJ의 결합 편집기에서 소스·미리보기·분할 모드를 전환한다. JCEF 지원 여부를 실행 시 확인하며, 지원 환경은 토큰화된 루프백 SVG 페이지를 표시하고 미지원 환경은 기존 Swing PNG 보기를 유지한다.
+Typst 파일은 별도 Tool Window가 아니라 IntelliJ의 결합 편집기에서 소스·미리보기·분할 모드를 전환한다. JCEF 지원 여부를 실행 시 확인하며, 지원 환경은 토큰화된 루프백 또는 CLI 대체 SVG 페이지를 표시하고 미지원 환경은 명시적인 비활성 상태를 표시한다.
 
 ---
 
@@ -355,9 +355,9 @@ Typst 파일은 별도 Tool Window가 아니라 IntelliJ의 결합 편집기에�
 
 ## 16. Future Extensions
 
-- 실제 `Span` 기반 양방향 소스 위치 동기화
+- 소스 위치에서 미리보기 위치로의 역방향 동기화
 - Reflexo 직접 컴파일과 변경 페이지 단위 전송
-- 미리보기 오류 위치의 브라우저 내 클릭 이동
+- 미리보기 진단 표시와 오류 위치 이동
 
 ---
 
@@ -370,4 +370,4 @@ Typst 파일은 별도 Tool Window가 아니라 IntelliJ의 결합 편집기에�
 | 런타임 프로토콜과 컴파일 작업 공간 | `renderer/src/` |
 | 바이너리 설치와 프로젝트 프로세스 수명 | `src/main/kotlin/com/livteam/typninja/runtime/` |
 | 진단 트리거와 패키지 감지 | `src/main/kotlin/com/livteam/typninja/preview/TypstAutoCompileService.kt` |
-| 편집기 결합과 JCEF 및 Swing 미리보기 | `src/main/kotlin/com/livteam/typninja/preview/TypstSplitEditorProvider.kt`, `src/main/kotlin/com/livteam/typninja/preview/TypstPreviewFileEditor.kt` |
+| 편집기 결합과 JCEF SVG 미리보기 | `src/main/kotlin/com/livteam/typninja/preview/TypstSplitEditorProvider.kt`, `src/main/kotlin/com/livteam/typninja/preview/TypstPreviewFileEditor.kt` |
