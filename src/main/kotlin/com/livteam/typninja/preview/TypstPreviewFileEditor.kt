@@ -4,6 +4,8 @@ import com.google.gson.JsonParser
 import com.intellij.ide.BrowserUtil
 import com.intellij.openapi.Disposable
 import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.components.Service
+import com.intellij.openapi.components.service
 import com.intellij.openapi.fileEditor.FileEditor
 import com.intellij.openapi.fileEditor.FileEditorManager
 import com.intellij.openapi.fileEditor.FileEditorState
@@ -37,6 +39,7 @@ import java.beans.PropertyChangeSupport
 import java.net.URI
 import java.nio.file.Files
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.ConcurrentHashMap
 import javax.swing.JButton
 import javax.swing.JCheckBox
 import javax.swing.JLabel
@@ -45,8 +48,10 @@ import javax.swing.SwingConstants
 
 internal class TypstPreviewPanel(
     private val project: Project,
-    private val sourceFile: VirtualFile,
+    private val editorFile: VirtualFile,
+    initialPreviewSource: VirtualFile,
 ) : Disposable {
+    private var sourceFile = initialPreviewSource
     private val browser = if (JBCefApp.isSupported()) JBCefBrowser() else null
     private val previewLinkQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
     private val previewPositionQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
@@ -81,6 +86,7 @@ internal class TypstPreviewPanel(
     @Volatile
     private var isDisposed = false
     private var removeServiceListener: (() -> Unit)? = null
+    private var removeBindingListener: (() -> Unit)? = null
 
     val component = JPanel(BorderLayout()).apply {
         add(buildToolbar(), BorderLayout.NORTH)
@@ -96,6 +102,12 @@ internal class TypstPreviewPanel(
         }
         invertCheckBox.isSelected = TypstSettingsService.getInstance(project).state.invertPreviewColors
         removeServiceListener = TypstPreviewService.getInstance(project).addListener(::acceptResult)
+        removeBindingListener = project.service<TypstPreviewBindingService>().addListener(editorFile) { previewSource ->
+            if (previewSource == sourceFile) return@addListener
+            sourceFile = previewSource
+            sourceMappingContext = null
+            showLatestOrRefresh()
+        }
         EditorFactory.getInstance().eventMulticaster.addEditorMouseListener(
             object : EditorMouseListener {
                 override fun mousePressed(event: EditorMouseEvent) {
@@ -301,6 +313,7 @@ internal class TypstPreviewPanel(
         if (document.lineCount == 0) return
         val startOffset = sourceOffset(document, position.line, position.column)
         val endOffset = sourceOffset(document, position.endLine, position.endColumn).coerceAtLeast(startOffset)
+        project.service<TypstPreviewBindingService>().bind(file, sourceFile)
         val editor = FileEditorManager.getInstance(project)
             .openTextEditor(OpenFileDescriptor(project, file, startOffset), true) ?: return
         editor.selectionModel.setSelection(startOffset, endOffset)
@@ -409,6 +422,8 @@ internal class TypstPreviewPanel(
         renderGeneration.incrementAndGet()
         removeServiceListener?.invoke()
         removeServiceListener = null
+        removeBindingListener?.invoke()
+        removeBindingListener = null
         if (browser != null && previewLoadHandler != null) {
             browser.jbCefClient.removeLoadHandler(previewLoadHandler, browser.cefBrowser)
         }
@@ -437,9 +452,10 @@ internal class TypstPreviewPanel(
 
 internal class TypstPreviewFileEditor(
     project: Project,
-    private val sourceFile: VirtualFile,
+    private val editorFile: VirtualFile,
+    previewSource: VirtualFile,
 ) : UserDataHolderBase(), FileEditor {
-    private val previewPanel = TypstPreviewPanel(project, sourceFile)
+    private val previewPanel = TypstPreviewPanel(project, editorFile, previewSource)
     private val propertyChangeSupport = PropertyChangeSupport(this)
     private var hasRequestedInitialPreview = false
 
@@ -453,7 +469,7 @@ internal class TypstPreviewFileEditor(
 
     override fun isModified(): Boolean = false
 
-    override fun isValid(): Boolean = sourceFile.isValid
+    override fun isValid(): Boolean = editorFile.isValid
 
     override fun addPropertyChangeListener(listener: PropertyChangeListener) {
         propertyChangeSupport.addPropertyChangeListener(listener)
@@ -463,7 +479,7 @@ internal class TypstPreviewFileEditor(
         propertyChangeSupport.removePropertyChangeListener(listener)
     }
 
-    override fun getFile(): VirtualFile = sourceFile
+    override fun getFile(): VirtualFile = editorFile
 
     override fun selectNotify() {
         if (!hasRequestedInitialPreview) {
@@ -474,5 +490,34 @@ internal class TypstPreviewFileEditor(
 
     override fun dispose() {
         previewPanel.dispose()
+    }
+}
+
+@Service(Service.Level.PROJECT)
+internal class TypstPreviewBindingService : Disposable {
+    private val previewSources = ConcurrentHashMap<String, VirtualFile>()
+    private val listeners = ConcurrentHashMap<String, MutableSet<(VirtualFile) -> Unit>>()
+
+    fun previewSourceFor(editorFile: VirtualFile): VirtualFile =
+        previewSources[editorFile.url]?.takeIf(VirtualFile::isValid) ?: editorFile
+
+    fun bind(editorFile: VirtualFile, previewSource: VirtualFile) {
+        if (!editorFile.isValid || !previewSource.isValid) return
+        previewSources[editorFile.url] = previewSource
+        listeners[editorFile.url]?.toList()?.forEach { listener -> listener(previewSource) }
+    }
+
+    fun addListener(editorFile: VirtualFile, listener: (VirtualFile) -> Unit): () -> Unit {
+        val fileListeners = listeners.computeIfAbsent(editorFile.url) { ConcurrentHashMap.newKeySet() }
+        fileListeners.add(listener)
+        return {
+            fileListeners.remove(listener)
+            if (fileListeners.isEmpty()) listeners.remove(editorFile.url, fileListeners)
+        }
+    }
+
+    override fun dispose() {
+        previewSources.clear()
+        listeners.clear()
     }
 }

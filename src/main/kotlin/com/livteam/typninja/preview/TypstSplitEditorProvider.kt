@@ -6,6 +6,7 @@ import com.intellij.openapi.fileEditor.FileEditorProvider
 import com.intellij.openapi.fileEditor.TextEditor
 import com.intellij.openapi.fileEditor.TextEditorWithPreview
 import com.intellij.openapi.fileEditor.TextEditorWithPreviewProvider
+import com.intellij.openapi.components.service
 import com.intellij.openapi.project.DumbAware
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.vfs.VirtualFile
@@ -30,7 +31,11 @@ private class TypstPreviewFileEditorProvider : FileEditorProvider, DumbAware {
         file.isValid && !file.isDirectory && file.fileType == TypstFileType
 
     override fun createEditor(project: Project, file: VirtualFile): FileEditor =
-        TypstPreviewFileEditor(project, file)
+        TypstPreviewFileEditor(
+            project,
+            file,
+            project.service<TypstPreviewBindingService>().previewSourceFor(file),
+        )
 
     override fun getEditorTypeId(): String = "typst-preview"
 
