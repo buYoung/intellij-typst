@@ -62,9 +62,7 @@ internal class TypstPreviewPanel(
             override fun onLoadEnd(browser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
                 if (!frame.isMain) return
                 frame.executeJavaScript(previewLinkBridgeScript(linkQuery), frame.url, 0)
-                if (sourceMappingContext != null) {
-                    frame.executeJavaScript(previewPositionBridgeScript(positionQuery), frame.url, 0)
-                }
+                frame.executeJavaScript(previewPositionBridgeScript(positionQuery), frame.url, 0)
             }
         }
     }
@@ -195,6 +193,7 @@ internal class TypstPreviewPanel(
         val previewUrl = result.previewUrl ?: return
         if (currentPreviewUrl == previewUrl) {
             executeJavaScript("window.typstPreview?.refresh();window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
+            previewPositionQuery?.let { query -> executeJavaScript(previewPositionBridgeScript(query)) }
         } else {
             currentPreviewUrl = previewUrl
             browser?.loadURL(previewUrl)
