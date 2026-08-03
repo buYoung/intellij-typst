@@ -48,32 +48,96 @@ import javax.swing.JLabel
 import javax.swing.JPanel
 import javax.swing.SwingConstants
 
+@Service(Service.Level.PROJECT)
+internal class TypstPreviewBrowserSession : Disposable {
+    @Volatile
+    private var activePanel: TypstPreviewPanel? = null
+
+    val browser = if (JBCefApp.isSupported()) JBCefBrowser("about:blank") else null
+    val previewLinkQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
+    val previewPositionQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
+    private val loadHandler = browser?.let {
+        object : CefLoadHandlerAdapter() {
+            override fun onLoadEnd(browser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
+                activePanel?.onBrowserLoadEnd(browser, frame)
+            }
+        }
+    }
+
+    init {
+        previewLinkQuery?.addHandler { url ->
+            activePanel?.openPreviewLink(url) ?: JBCefJSQuery.Response("")
+        }
+        previewPositionQuery?.addHandler { payload ->
+            activePanel?.openPreviewPosition(payload) ?: JBCefJSQuery.Response("")
+        }
+        if (browser != null && loadHandler != null) {
+            browser.jbCefClient.addLoadHandler(loadHandler, browser.cefBrowser)
+        }
+    }
+
+    fun activate(panel: TypstPreviewPanel, host: JPanel) {
+        activePanel = panel
+        attach(panel, host)
+    }
+
+    fun attach(panel: TypstPreviewPanel, host: JPanel) {
+        if (activePanel !== panel) return
+        val browserComponent = browser?.component ?: return
+        if (browserComponent.parent === host) return
+        val previousParent = browserComponent.parent
+        previousParent?.remove(browserComponent)
+        previousParent?.revalidate()
+        previousParent?.repaint()
+        host.add(browserComponent, BorderLayout.CENTER)
+        host.revalidate()
+        host.repaint()
+    }
+
+    fun isActive(panel: TypstPreviewPanel): Boolean = activePanel === panel
+
+    fun deactivate(panel: TypstPreviewPanel) {
+        if (activePanel !== panel) return
+        activePanel = null
+        val browserComponent = browser?.component ?: return
+        val parent = browserComponent.parent
+        parent?.remove(browserComponent)
+        parent?.revalidate()
+        parent?.repaint()
+    }
+
+    override fun dispose() {
+        activePanel = null
+        if (browser != null && loadHandler != null) {
+            browser.jbCefClient.removeLoadHandler(loadHandler, browser.cefBrowser)
+        }
+        previewLinkQuery?.dispose()
+        previewPositionQuery?.dispose()
+        browser?.dispose()
+    }
+}
+
 internal class TypstPreviewPanel(
     private val project: Project,
     private val editorFile: VirtualFile,
     initialBinding: TypstPreviewBinding,
 ) : Disposable {
+    private val bindingService = project.service<TypstPreviewBindingService>()
+    private val browserSession = project.service<TypstPreviewBrowserSession>()
     private var sourceFile = initialBinding.previewSource
     private var pendingPreviewSelection = initialBinding.selection
-    private val browser = if (JBCefApp.isSupported()) JBCefBrowser() else null
-    private val previewLinkQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
-    private val previewPositionQuery = browser?.let { JBCefJSQuery.create(it as JBCefBrowserBase) }
-    private val previewLoadHandler = browser?.let {
-        val linkQuery = checkNotNull(previewLinkQuery)
-        val positionQuery = checkNotNull(previewPositionQuery)
-        object : CefLoadHandlerAdapter() {
-            override fun onLoadEnd(browser: CefBrowser, frame: CefFrame, httpStatusCode: Int) {
-                if (!frame.isMain) return
-                frame.executeJavaScript(previewLinkBridgeScript(linkQuery), frame.url, 0)
-                frame.executeJavaScript(previewPositionBridgeScript(positionQuery), frame.url, 0)
-            }
+    private val browser get() = browserSession.browser
+    private val previewLinkQuery get() = browserSession.previewLinkQuery
+    private val previewPositionQuery get() = browserSession.previewPositionQuery
+    private val bridgeInjectionAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
+    private val previewHost = JPanel(BorderLayout()).apply {
+        if (browser == null) {
+            add(
+                JLabel("Typst preview requires JCEF in the IDE runtime.", SwingConstants.CENTER),
+                BorderLayout.CENTER,
+            )
         }
     }
-    private val bridgeInjectionAlarm = Alarm(Alarm.ThreadToUse.SWING_THREAD, this)
-    private val previewComponent = browser?.component ?: JLabel(
-        "Typst preview requires JCEF in the IDE runtime.",
-        SwingConstants.CENTER,
-    )
     private val statusLabel = JLabel("Open a Typst file and choose Preview.")
     private val zoomLabel = JLabel("100%")
     private val invertCheckBox = JCheckBox("Invert colors")
@@ -82,46 +146,56 @@ internal class TypstPreviewPanel(
     private var currentPage = 0
     private var pageCount = 0
     private var currentPreviewUrl: String? = null
+    private var loadedPreviewUrl: String? = null
+    private var currentPreviewResult: TypstPreviewResult? = null
+    private var isPreviewLoadPending = false
     private var mouseSelectionBeforePress: MouseSelection? = null
     @Volatile
     private var sourceMappingContext: SourceMappingContext? = null
     @Volatile
     private var isDisposed = false
-    private var hasRequestedInitialPreview = false
-    private var hasDeselectedBoundPreview = false
     private var removeServiceListener: (() -> Unit)? = null
     private var removeBindingListener: (() -> Unit)? = null
 
     val component = object : JPanel(BorderLayout()) {
         init {
             add(buildToolbar(), BorderLayout.NORTH)
-            add(previewComponent, BorderLayout.CENTER)
+            add(previewHost, BorderLayout.CENTER)
             add(statusLabel, BorderLayout.SOUTH)
         }
 
         override fun addNotify() {
             super.addNotify()
-            onAdded()
+            ApplicationManager.getApplication().invokeLater {
+                if (browserSession.isActive(this@TypstPreviewPanel)) {
+                    browserSession.attach(this@TypstPreviewPanel, previewHost)
+                }
+                val previewUrl = currentPreviewUrl
+                if (!isDisposed && browserSession.isActive(this@TypstPreviewPanel) && previewUrl != null &&
+                    (loadedPreviewUrl != previewUrl || browser?.cefBrowser?.url != previewUrl)
+                ) {
+                    isPreviewLoadPending = false
+                    loadCurrentPreviewIfNeeded()
+                }
+            }
+            scheduleBridgeInjection()
+            showPendingPreviewSelection()
         }
     }
 
     init {
         Disposer.register(project, this)
-        previewLinkQuery?.addHandler(::openPreviewLink)
-        previewPositionQuery?.addHandler(::openPreviewPosition)
-        if (browser != null && previewLoadHandler != null) {
-            browser.jbCefClient.addLoadHandler(previewLoadHandler, browser.cefBrowser)
-        }
         invertCheckBox.isSelected = TypstSettingsService.getInstance(project).state.invertPreviewColors
-        removeServiceListener = TypstPreviewService.getInstance(project).addListener(::acceptResult)
-        removeBindingListener = project.service<TypstPreviewBindingService>().addListener(editorFile) { binding ->
+        removeServiceListener = TypstPreviewService.getInstance(project).addListener { result ->
+            acceptResult(result, shouldRefreshLoadedPreview = true)
+        }
+        removeBindingListener = bindingService.addListener(editorFile) { binding ->
             val hasSourceChanged = binding.previewSource != sourceFile
             sourceFile = binding.previewSource
             pendingPreviewSelection = binding.selection
-            hasDeselectedBoundPreview = false
             if (hasSourceChanged) {
                 sourceMappingContext = null
-                showLatestOrRefresh()
+                if (browserSession.isActive(this)) showLatestOrRefresh()
             } else {
                 showPendingPreviewSelection()
             }
@@ -174,54 +248,36 @@ internal class TypstPreviewPanel(
         val existingResult = previewService.statusFor(sourceFile)
         val successfulResult = previewService.lastSuccessfulFor(sourceFile)
         when {
+            !previewService.isCurrentPreviewFor(sourceFile) -> refresh()
             existingResult == null -> refresh()
             existingResult.isRunning -> {
-                successfulResult?.let(::acceptResult)
+                successfulResult?.let { acceptResult(it, shouldRefreshLoadedPreview = false) }
                 refresh()
             }
             existingResult.failureMessage != null -> {
-                successfulResult?.let(::acceptResult)
-                acceptResult(existingResult)
+                successfulResult?.let { acceptResult(it, shouldRefreshLoadedPreview = false) }
+                acceptResult(existingResult, shouldRefreshLoadedPreview = false)
             }
-            else -> acceptResult(existingResult)
+            else -> acceptResult(existingResult, shouldRefreshLoadedPreview = false)
         }
     }
 
-    fun requestInitialPreview() {
-        if (isDisposed || hasRequestedInitialPreview) return
-        hasRequestedInitialPreview = true
+    fun onSelected() {
+        browserSession.activate(this, previewHost)
         showLatestOrRefresh()
-    }
-
-    fun onAdded() {
-        requestInitialPreview()
         scheduleBridgeInjection()
         showPendingPreviewSelection()
     }
 
-    fun onSelected() {
-        if (hasDeselectedBoundPreview && sourceFile != editorFile) {
-            sourceFile = editorFile
-            pendingPreviewSelection = null
-            sourceMappingContext = null
-            hasDeselectedBoundPreview = false
-            showLatestOrRefresh()
-        }
-        onAdded()
-    }
-
-    fun onDeselected() {
-        if (sourceFile != editorFile) hasDeselectedBoundPreview = true
-    }
-
-    private fun acceptResult(result: TypstPreviewResult) {
+    private fun acceptResult(result: TypstPreviewResult, shouldRefreshLoadedPreview: Boolean) {
         if (result.sourceFile != sourceFile) return
         if (!ApplicationManager.getApplication().isDispatchThread) {
             ApplicationManager.getApplication().invokeLater {
-                if (!isDisposed) acceptResult(result)
+                if (!isDisposed) acceptResult(result, shouldRefreshLoadedPreview)
             }
             return
         }
+        if (!browserSession.isActive(this)) return
         when {
             result.isRunning -> {
                 renderGeneration.incrementAndGet()
@@ -229,14 +285,14 @@ internal class TypstPreviewPanel(
             }
             result.failureMessage != null -> statusLabel.text = result.failureMessage
             browser == null -> statusLabel.text = "Typst preview requires JCEF in the IDE runtime."
-            result.previewUrl != null -> showRemotePreview(result)
+            result.previewUrl != null -> showRemotePreview(result, shouldRefreshLoadedPreview)
             result.outputFiles.isEmpty() -> statusLabel.text = "No preview pages were produced."
             result.format == "svg" -> loadSvgPreview(result)
             else -> statusLabel.text = "Unsupported preview format: ${result.format}"
         }
     }
 
-    private fun showRemotePreview(result: TypstPreviewResult) {
+    private fun showRemotePreview(result: TypstPreviewResult, shouldRefreshLoadedPreview: Boolean) {
         sourceMappingContext = if (result.sourceMappingAvailable &&
             result.runtimeGeneration != null && result.documentVersion != null
         ) {
@@ -248,21 +304,53 @@ internal class TypstPreviewPanel(
         currentPage = currentPage.coerceIn(0, (pageCount - 1).coerceAtLeast(0))
         renderGeneration.incrementAndGet()
         val previewUrl = result.previewUrl ?: return
-        if (currentPreviewUrl == previewUrl) {
-            executeJavaScript("window.typstPreview?.refresh();window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
+        currentPreviewResult = result
+        val actualPreviewUrl = browser?.cefBrowser?.url
+        if (currentPreviewUrl == previewUrl && loadedPreviewUrl == previewUrl && actualPreviewUrl == previewUrl) {
+            if (shouldRefreshLoadedPreview) executeJavaScript("window.typstPreview?.refresh()")
+            executeJavaScript("window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
             previewPositionQuery?.let { query -> executeJavaScript(previewPositionBridgeScript(query)) }
             showPendingPreviewSelection()
-        } else {
+            updatePreviewStatus(result)
+        } else if (actualPreviewUrl == previewUrl) {
             currentPreviewUrl = previewUrl
-            browser?.loadURL(previewUrl)
-            scheduleBridgeInjection()
+            loadedPreviewUrl = previewUrl
+            isPreviewLoadPending = false
+            executeJavaScript("window.typstPreview?.setInvert(${invertCheckBox.isSelected})")
+            previewPositionQuery?.let { query -> executeJavaScript(previewPositionBridgeScript(query)) }
+            showPendingPreviewSelection()
+            updatePreviewStatus(result)
+        } else {
+            if (currentPreviewUrl != previewUrl) {
+                loadedPreviewUrl = null
+                isPreviewLoadPending = false
+            }
+            currentPreviewUrl = previewUrl
+            statusLabel.text = "Loading preview…"
+            loadCurrentPreviewIfNeeded()
         }
-        updatePreviewStatus(result)
+    }
+
+    private fun loadCurrentPreviewIfNeeded() {
+        if (!browserSession.isActive(this)) return
+        val previewUrl = currentPreviewUrl ?: return
+        val previewBrowser = browser ?: return
+        if (isPreviewLoadPending ||
+            (loadedPreviewUrl == previewUrl && previewBrowser.cefBrowser.url == previewUrl)
+        ) {
+            return
+        }
+        isPreviewLoadPending = true
+        previewBrowser.loadURL(previewUrl)
+        scheduleBridgeInjection()
     }
 
     private fun loadSvgPreview(result: TypstPreviewResult) {
         sourceMappingContext = null
         currentPreviewUrl = null
+        loadedPreviewUrl = null
+        currentPreviewResult = null
+        isPreviewLoadPending = false
         val generation = renderGeneration.incrementAndGet()
         val outputPaths = result.outputFiles.map { it.toNioPath() }
         AppExecutorUtil.getAppExecutorService().submit {
@@ -358,7 +446,7 @@ internal class TypstPreviewPanel(
         )
     }
 
-    private fun openPreviewLink(url: String): JBCefJSQuery.Response {
+    internal fun openPreviewLink(url: String): JBCefJSQuery.Response {
         val uri = runCatching { URI(url) }.getOrNull() ?: return JBCefJSQuery.Response("")
         if (uri.scheme.equals("http", ignoreCase = true) || uri.scheme.equals("https", ignoreCase = true)) {
             ApplicationManager.getApplication().invokeLater {
@@ -368,7 +456,7 @@ internal class TypstPreviewPanel(
         return JBCefJSQuery.Response("")
     }
 
-    private fun openPreviewPosition(payload: String): JBCefJSQuery.Response {
+    internal fun openPreviewPosition(payload: String): JBCefJSQuery.Response {
         val context = sourceMappingContext ?: return JBCefJSQuery.Response("")
         val position = runCatching { JsonParser.parseString(payload).asJsonObject }.getOrNull()
             ?: return JBCefJSQuery.Response("")
@@ -401,13 +489,11 @@ internal class TypstPreviewPanel(
         if (document.lineCount == 0) return
         val startOffset = sourceOffset(document, position.line, position.column)
         val endOffset = sourceOffset(document, position.endLine, position.endColumn).coerceAtLeast(startOffset)
-        val bindingService = project.service<TypstPreviewBindingService>()
         val binding = bindingService.bind(file, sourceFile, page, x, y)
         pendingPreviewSelection = binding.selection
         showPendingPreviewSelection()
         val editor = FileEditorManager.getInstance(project)
             .openTextEditor(OpenFileDescriptor(project, file, startOffset), true)
-        bindingService.completeNavigation(file, binding)
         editor ?: return
         editor.selectionModel.setSelection(startOffset, endOffset)
         editor.caretModel.moveToOffset(endOffset)
@@ -513,16 +599,25 @@ internal class TypstPreviewPanel(
     override fun dispose() {
         isDisposed = true
         renderGeneration.incrementAndGet()
+        browserSession.deactivate(this)
         removeServiceListener?.invoke()
         removeServiceListener = null
         removeBindingListener?.invoke()
         removeBindingListener = null
-        if (browser != null && previewLoadHandler != null) {
-            browser.jbCefClient.removeLoadHandler(previewLoadHandler, browser.cefBrowser)
+        bindingService.releasePreviewSource(editorFile, sourceFile)
+    }
+
+    internal fun onBrowserLoadEnd(browser: CefBrowser, frame: CefFrame) {
+        if (!frame.isMain) return
+        val previewUrl = currentPreviewUrl
+        if (previewUrl != null && frame.url == previewUrl) {
+            isPreviewLoadPending = false
+            loadedPreviewUrl = previewUrl
+            currentPreviewResult?.let(::updatePreviewStatus)
         }
-        previewLinkQuery?.dispose()
-        previewPositionQuery?.dispose()
-        browser?.dispose()
+        previewLinkQuery?.let { frame.executeJavaScript(previewLinkBridgeScript(it), frame.url, 0) }
+        previewPositionQuery?.let { frame.executeJavaScript(previewPositionBridgeScript(it), frame.url, 0) }
+        showPendingPreviewSelection()
     }
 
     private data class SourceMappingContext(
@@ -578,10 +673,6 @@ internal class TypstPreviewFileEditor(
         previewPanel.onSelected()
     }
 
-    override fun deselectNotify() {
-        previewPanel.onDeselected()
-    }
-
     override fun dispose() {
         Disposer.dispose(previewPanel)
     }
@@ -590,12 +681,16 @@ internal class TypstPreviewFileEditor(
 @Service(Service.Level.PROJECT)
 internal class TypstPreviewBindingService : Disposable {
     private val bindings = ConcurrentHashMap<String, TypstPreviewBinding>()
+    private val previewSources = ConcurrentHashMap<String, VirtualFile>()
     private val listeners = ConcurrentHashMap<String, MutableSet<(TypstPreviewBinding) -> Unit>>()
     private val selectionSequence = AtomicLong()
 
     fun bindingFor(editorFile: VirtualFile): TypstPreviewBinding =
         bindings.remove(editorFile.url)?.takeIf { it.previewSource.isValid }
-            ?: TypstPreviewBinding(editorFile)
+            ?: TypstPreviewBinding(previewSourceFor(editorFile))
+
+    fun previewSourceFor(editorFile: VirtualFile): VirtualFile =
+        previewSources[editorFile.url]?.takeIf(VirtualFile::isValid) ?: editorFile
 
     fun bind(
         editorFile: VirtualFile,
@@ -609,13 +704,19 @@ internal class TypstPreviewBindingService : Disposable {
             previewSource,
             TypstPreviewSelection(selectionSequence.incrementAndGet(), page, x, y),
         )
-        bindings[editorFile.url] = binding
-        listeners[editorFile.url]?.toList()?.forEach { listener -> listener(binding) }
+        previewSources[editorFile.url] = previewSource
+        val fileListeners = listeners[editorFile.url]?.toList().orEmpty()
+        if (fileListeners.isEmpty()) {
+            bindings[editorFile.url] = binding
+        } else {
+            bindings.remove(editorFile.url)
+            fileListeners.forEach { listener -> listener(binding) }
+        }
         return binding
     }
 
-    fun completeNavigation(editorFile: VirtualFile, binding: TypstPreviewBinding) {
-        bindings.remove(editorFile.url, binding)
+    fun releasePreviewSource(editorFile: VirtualFile, previewSource: VirtualFile) {
+        previewSources.remove(editorFile.url, previewSource)
     }
 
     fun addListener(editorFile: VirtualFile, listener: (TypstPreviewBinding) -> Unit): () -> Unit {
@@ -629,6 +730,7 @@ internal class TypstPreviewBindingService : Disposable {
 
     override fun dispose() {
         bindings.clear()
+        previewSources.clear()
         listeners.clear()
     }
 }

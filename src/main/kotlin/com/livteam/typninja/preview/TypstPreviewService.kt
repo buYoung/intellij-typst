@@ -64,6 +64,8 @@ class TypstPreviewService(
     private val activeRequests = ConcurrentHashMap<String, CompilationRequest>()
     private val latestResults = ConcurrentHashMap<String, TypstPreviewResult>()
     private val latestSuccessfulResults = ConcurrentHashMap<String, TypstPreviewResult>()
+    @Volatile
+    private var currentPreviewSourcePath: String? = null
 
     fun addListener(listener: (TypstPreviewResult) -> Unit): () -> Unit {
         listeners.add(listener)
@@ -75,13 +77,23 @@ class TypstPreviewService(
     fun lastSuccessfulFor(source: VirtualFile?): TypstPreviewResult? =
         source?.path?.let(latestSuccessfulResults::get)
 
+    fun isCurrentPreviewFor(source: VirtualFile): Boolean = currentPreviewSourcePath == source.path
+
     fun preview(source: VirtualFile, unsavedText: String? = null, documentVersion: Long = source.modificationStamp) =
-        compile(source, "svg", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
+        compile(source, source, "svg", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
+
+    fun previewChangedSource(
+        previewSource: VirtualFile,
+        changedSource: VirtualFile,
+        unsavedText: String?,
+        documentVersion: Long,
+    ) = compile(previewSource, changedSource, "svg", null, unsavedText, PREVIEW_CHANNEL, documentVersion)
 
     fun export(source: VirtualFile, format: String, destination: Path, unsavedText: String? = null) =
-        compile(source, format, destination, unsavedText, "export:$format", source.modificationStamp)
+        compile(source, source, format, destination, unsavedText, "export:$format", source.modificationStamp)
 
     private fun compile(
+        previewSource: VirtualFile,
         changedSource: VirtualFile,
         format: String,
         destination: Path?,
@@ -91,22 +103,24 @@ class TypstPreviewService(
     ) {
         val normalizedFormat = format.lowercase()
         if (normalizedFormat !in CLI_FORMATS) {
-            publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource, "Unsupported Typst export format"))
+            publish(TypstPreviewResult(emptyList(), normalizedFormat, previewSource, "Unsupported Typst export format"))
             return
         }
         val request = CompilationRequest(
-            sourcePath = changedSource.path,
+            previewSourcePath = previewSource.path,
+            changedSourcePath = changedSource.path,
             format = normalizedFormat,
             destination = destination,
             unsavedText = unsavedText,
             documentVersion = documentVersion,
         )
         if (activeJobs[channel]?.isActive == true && activeRequests[channel] == request) return
+        if (channel == PREVIEW_CHANNEL) currentPreviewSourcePath = previewSource.path
         val generationCounter = channelGenerations.computeIfAbsent(channel) { AtomicLong() }
         val generation = generationCounter.incrementAndGet()
         activeJobs.remove(channel)?.cancel()
         activeProcesses.remove(channel)?.destroyForcibly()
-        publish(TypstPreviewResult(emptyList(), normalizedFormat, changedSource, isRunning = true))
+        publish(TypstPreviewResult(emptyList(), normalizedFormat, previewSource, isRunning = true))
 
         activeRequests[channel] = request
         val job = coroutineScope.launch(start = CoroutineStart.LAZY) {
@@ -114,7 +128,7 @@ class TypstPreviewService(
             val capability = TypstToolchainService.getInstance(project).awaitCapability()
             if (!capability.isValid || capability.executablePath == null) {
                 publishCurrent(channel, generation, TypstPreviewResult(
-                    emptyList(), normalizedFormat, changedSource,
+                    emptyList(), normalizedFormat, previewSource,
                     capability.failureMessage ?: "Typst executable is unavailable",
                     durationMillis = elapsedMillis(startedAt),
                 ))
@@ -123,12 +137,12 @@ class TypstPreviewService(
             val settings = TypstSettingsService.getInstance(project)
             if (destination == null && settings.state.useNativeRenderer) {
                 val runtimeResult = TypstRuntimeService.getInstance(project)
-                    .compile(changedSource, unsavedText, render = true, documentVersion)
+                    .compileChangedSource(previewSource, changedSource, unsavedText, render = true, documentVersion)
                 if (runtimeResult != null) {
                     publishCurrent(channel, generation, TypstPreviewResult(
                         outputFiles = emptyList(),
                         format = "svg",
-                        sourceFile = changedSource,
+                        sourceFile = previewSource,
                         failureMessage = runtimeResult.takeIf { it.outputStatus == "failed" }
                             ?.diagnostics?.firstOrNull()?.message,
                         durationMillis = elapsedMillis(startedAt),
@@ -141,9 +155,10 @@ class TypstPreviewService(
                     return@launch
                 }
             }
+            val previewSourcePath = Path.of(previewSource.path).toAbsolutePath().normalize()
             val changedSourcePath = Path.of(changedSource.path).toAbsolutePath().normalize()
-            val originalRoot = settings.workspaceRoot(changedSourcePath)
-            val originalEntrypoint = settings.mainFile(changedSourcePath)
+            val originalRoot = settings.workspaceRoot(previewSourcePath)
+            val originalEntrypoint = settings.mainFile(previewSourcePath)
             val output = destination ?: createPreviewOutput(generation, normalizedFormat)
             var overlay: CompilationOverlay? = null
             try {
@@ -166,7 +181,7 @@ class TypstPreviewService(
                 val commandResult = withContext(Dispatchers.IO) { runCommand(channel, command) }
                 if (commandResult.exitCode != 0) {
                     publishCurrent(channel, generation, TypstPreviewResult(
-                        emptyList(), normalizedFormat, changedSource,
+                        emptyList(), normalizedFormat, previewSource,
                         commandResult.error.ifBlank { "Typst exited with code ${commandResult.exitCode}" },
                         durationMillis = elapsedMillis(startedAt),
                     ))
@@ -174,13 +189,13 @@ class TypstPreviewService(
                 }
                 val outputFiles = withContext(Dispatchers.IO) { refreshOutputs(pageOutputPath(output, normalizedFormat)) }
                 publishCurrent(channel, generation, TypstPreviewResult(
-                    outputFiles, normalizedFormat, changedSource, durationMillis = elapsedMillis(startedAt),
+                    outputFiles, normalizedFormat, previewSource, durationMillis = elapsedMillis(startedAt),
                 ))
             } catch (exception: CancellationException) {
                 throw exception
             } catch (exception: Exception) {
                 publishCurrent(channel, generation, TypstPreviewResult(
-                    emptyList(), normalizedFormat, changedSource,
+                    emptyList(), normalizedFormat, previewSource,
                     exception.message ?: "Typst compilation failed",
                     durationMillis = elapsedMillis(startedAt),
                 ))
@@ -364,6 +379,7 @@ class TypstPreviewService(
         previewDirectories.clear()
         latestResults.clear()
         latestSuccessfulResults.clear()
+        currentPreviewSourcePath = null
         listeners.clear()
     }
 
@@ -380,7 +396,8 @@ class TypstPreviewService(
     private data class CompilationOverlay(val root: Path, val entrypoint: Path)
     private data class CommandResult(val exitCode: Int, val output: String, val error: String)
     private data class CompilationRequest(
-        val sourcePath: String,
+        val previewSourcePath: String,
+        val changedSourcePath: String,
         val format: String,
         val destination: Path?,
         val unsavedText: String?,

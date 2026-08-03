@@ -150,12 +150,20 @@ class TypstRuntimeService(
         unsavedText: String?,
         render: Boolean,
         documentVersion: Long = source.modificationStamp,
+    ): TypstRuntimeCompileResult? = compileChangedSource(source, source, unsavedText, render, documentVersion)
+
+    suspend fun compileChangedSource(
+        previewSource: VirtualFile,
+        changedSource: VirtualFile,
+        unsavedText: String?,
+        render: Boolean,
+        documentVersion: Long,
     ): TypstRuntimeCompileResult? {
         val settings = TypstSettingsService.getInstance(project)
         if (!settings.state.useNativeRenderer || settings.extraArguments().isNotEmpty() ||
             settings.previewArguments().isNotEmpty()) {
             status = TypstRuntimeStatus.CLI_FALLBACK
-            return if (render) null else compileCliDiagnostics(source, documentVersion)
+            return if (render) null else compileCliDiagnostics(previewSource, documentVersion)
         }
         val capability = TypstToolchainService.getInstance(project).currentCapability()
         val executable = capability.executablePath ?: run {
@@ -163,13 +171,13 @@ class TypstRuntimeService(
             return null
         }
         return try {
-            if (ensureInitialized(source, executable) == null) {
-                return if (render) null else compileCliDiagnostics(source, documentVersion)
+            if (ensureInitialized(previewSource, executable) == null) {
+                return if (render) null else compileCliDiagnostics(previewSource, documentVersion)
             }
-            synchronizeSourceOverlays(source, unsavedText, documentVersion)
+            synchronizeSourceOverlays(previewSource, changedSource, unsavedText, documentVersion)
             val compileGeneration = generation.incrementAndGet()
             val response = request(
-                source,
+                previewSource,
                 documentVersion,
                 compileGeneration,
                 "compile",
@@ -183,7 +191,7 @@ class TypstRuntimeService(
                 gson.fromJson(it, TypstRuntimeDiagnostic::class.java)
             }.orEmpty()
             diagnostics.groupBy(TypstRuntimeDiagnostic::uri).forEach(diagnosticsByUri::put)
-            if (diagnostics.none { it.uri == source.url }) diagnosticsByUri.remove(source.url)
+            if (diagnostics.none { it.uri == previewSource.url }) diagnosticsByUri.remove(previewSource.url)
             withContext(Dispatchers.EDT) { DaemonCodeAnalyzer.getInstance(project).restart() }
             TypstRuntimeCompileResult(
                 generation = compileGeneration,
@@ -202,17 +210,18 @@ class TypstRuntimeService(
         } catch (exception: Exception) {
             logger.warn("Typst runtime compile failed; falling back to the Typst CLI", exception)
             status = TypstRuntimeStatus.CLI_FALLBACK
-            if (render) null else compileCliDiagnostics(source, documentVersion)
+            if (render) null else compileCliDiagnostics(previewSource, documentVersion)
         }
     }
 
     private suspend fun synchronizeSourceOverlays(
-        source: VirtualFile,
+        previewSource: VirtualFile,
+        changedSource: VirtualFile,
         explicitText: String?,
         documentVersion: Long,
     ) {
         val settings = TypstSettingsService.getInstance(project)
-        val root = settings.workspaceRoot(Path.of(source.path))
+        val root = settings.workspaceRoot(Path.of(previewSource.path))
         val overlays = readAction {
             buildMap<String, String> {
                 FileDocumentManager.getInstance().unsavedDocuments.forEach { document ->
@@ -223,16 +232,16 @@ class TypstRuntimeService(
                         put(file.url, document.text)
                     }
                 }
-                if (explicitText != null) put(source.url, explicitText)
+                if (explicitText != null) put(changedSource.url, explicitText)
             }
         }
         val staleUris = overlayUris.filterNot(overlays::containsKey)
         for (uri in staleUris) {
-            request(source, documentVersion, generation.get(), "updateSource", mapOf("uri" to uri, "text" to null))
+            request(previewSource, documentVersion, generation.get(), "updateSource", mapOf("uri" to uri, "text" to null))
             overlayUris.remove(uri)
         }
         for ((uri, text) in overlays) {
-            request(source, documentVersion, generation.get(), "updateSource", mapOf("uri" to uri, "text" to text))
+            request(previewSource, documentVersion, generation.get(), "updateSource", mapOf("uri" to uri, "text" to text))
             overlayUris.add(uri)
         }
     }

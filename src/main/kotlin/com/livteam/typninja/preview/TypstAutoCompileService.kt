@@ -75,7 +75,10 @@ class TypstAutoCompileService(
             TypstRuntimeService.getInstance(project)
                 .requestCompile(file, currentText, render = false, documentVersion = documentVersion)
         }
-        if (settings.autoPreview == trigger) previewService.preview(file, currentText, documentVersion)
+        if (settings.autoPreview == trigger) {
+            val previewSource = project.service<TypstPreviewBindingService>().previewSourceFor(file)
+            previewService.previewChangedSource(previewSource, file, currentText, documentVersion)
+        }
         if (settings.autoExport == trigger) {
             val sourcePath = Path.of(file.path).toAbsolutePath().normalize()
             val entrypoint = settingsService.mainFile(sourcePath)
