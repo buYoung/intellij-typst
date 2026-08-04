@@ -122,7 +122,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*-signed.zip
-          gh release upload ${{ github.event.release.tag_name }} ./build/runtime-assets/*
-          gh release upload ${{ github.event.release.tag_name }} ./LICENSE
-          gh release upload ${{ github.event.release.tag_name }} ./src/main/resources/META-INF/third-party-notices.txt
+          gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*-signed.zip --clobber
+          gh release upload ${{ github.event.release.tag_name }} ./build/runtime-assets/* --clobber
+          gh release upload ${{ github.event.release.tag_name }} ./LICENSE --clobber
+          gh release upload ${{ github.event.release.tag_name }} ./src/main/resources/META-INF/third-party-notices.txt --clobber
