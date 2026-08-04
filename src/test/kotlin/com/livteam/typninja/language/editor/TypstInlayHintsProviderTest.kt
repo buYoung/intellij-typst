@@ -15,7 +15,6 @@ class TypstInlayHintsProviderTest : DeclarativeInlayHintsProviderTestCase() {
             "test.typ",
             """#text(/*<# fill: #>*/get-level-color(level), size: text-14, weight: "bold")[#formatted]""",
             TypstInlayHintsProvider(),
-            testMode = ProviderTestMode.SIMPLE,
         )
     }
 
@@ -24,7 +23,6 @@ class TypstInlayHintsProviderTest : DeclarativeInlayHintsProviderTestCase() {
             "test.typ",
             """#link(dest: "https://example.com", /*<# body: #>*/[Docs])""",
             TypstInlayHintsProvider(),
-            testMode = ProviderTestMode.SIMPLE,
         )
     }
 

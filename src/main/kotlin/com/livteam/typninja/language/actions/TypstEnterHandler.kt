@@ -3,12 +3,23 @@ package com.livteam.typninja.language.actions
 import com.intellij.codeInsight.editorActions.enter.EnterHandlerDelegate
 import com.intellij.openapi.actionSystem.DataContext
 import com.intellij.openapi.editor.Editor
+import com.intellij.openapi.editor.actionSystem.EditorActionHandler
+import com.intellij.openapi.util.Ref
 import com.intellij.psi.PsiFile
 import com.livteam.typninja.language.psi.TypstFile
 import com.livteam.typninja.settings.TypstSettingsService
 
 /** Continues Typst comments, markup lists, and multi-line equations after Enter. */
 class TypstEnterHandler : EnterHandlerDelegate {
+
+    override fun preprocessEnter(
+        file: PsiFile,
+        editor: Editor,
+        caretOffset: Ref<Int>,
+        caretAdvance: Ref<Int>,
+        dataContext: DataContext,
+        originalHandler: EditorActionHandler?,
+    ): EnterHandlerDelegate.Result = EnterHandlerDelegate.Result.Continue
 
     override fun postProcessEnter(file: PsiFile, editor: Editor, dataContext: DataContext): EnterHandlerDelegate.Result {
         if (file !is TypstFile) return EnterHandlerDelegate.Result.Continue

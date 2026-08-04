@@ -3,11 +3,10 @@ package com.livteam.typninja.runtime
 import com.google.gson.Gson
 import com.intellij.openapi.application.PathManager
 import com.intellij.openapi.diagnostic.Logger
-import com.intellij.openapi.extensions.PluginId
-import com.intellij.ide.plugins.PluginManagerCore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.net.URI
+import java.net.JarURLConnection
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -108,10 +107,16 @@ internal class TypstRuntimeInstaller {
     }
 
     private fun cachePath(platform: String): Path {
-        val pluginVersion = PluginManagerCore.getPlugin(PluginId.getId(PLUGIN_ID))?.version ?: "development"
+        val pluginVersion = packagedPluginVersion() ?: "development"
         val executableName = if (platform.contains("windows")) "typst-runtime.exe" else "typst-runtime"
         return Path.of(PathManager.getSystemPath(), "typst", "runtime", pluginVersion, platform, executableName)
     }
+
+    private fun packagedPluginVersion(): String? = runCatching {
+        val classResource = javaClass.getResource("${javaClass.simpleName}.class") ?: return@runCatching null
+        val connection = classResource.openConnection() as? JarURLConnection ?: return@runCatching null
+        connection.manifest.mainAttributes.getValue("Version")?.takeIf(String::isNotBlank)
+    }.getOrNull()
 
     private fun download(asset: RuntimeAsset, destination: Path): Path {
         require(URI(asset.url).scheme.equals("https", ignoreCase = true)) { "Runtime URL must use HTTPS" }
@@ -163,7 +168,6 @@ internal class TypstRuntimeInstaller {
 
     private companion object {
         const val MANIFEST_RESOURCE = "typst-runtime/manifest.json"
-        const val PLUGIN_ID = "com.livteam.typninja"
         const val PROTOCOL_VERSION = 1
     }
 }

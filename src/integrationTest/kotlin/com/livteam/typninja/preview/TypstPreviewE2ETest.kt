@@ -129,8 +129,8 @@ class TypstPreviewE2ETest {
             "JCEF navigation to $expectedUrl",
             1.minutes,
             200.milliseconds,
-            { url: String -> "url=$url" },
-            { ideFrame().jcef().getUrl() },
+            { url: String? -> "url=$url" },
+            { runCatching { ideFrame().jcef().getUrl() }.getOrNull() },
             { url -> url == expectedUrl },
         )
         waitFor(
