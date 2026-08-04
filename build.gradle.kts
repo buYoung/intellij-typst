@@ -1,6 +1,11 @@
+import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
+import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
-import org.jetbrains.kotlin.gradle.dsl.JvmDefaultMode
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
+import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+import java.io.File
 
 plugins {
     id("org.jetbrains.kotlin.jvm")
@@ -10,7 +15,7 @@ plugins {
 
 kotlin {
     compilerOptions {
-        jvmDefault = JvmDefaultMode.NO_COMPATIBILITY
+        freeCompilerArgs.add("-Xjvm-default=all")
     }
 }
 
@@ -33,9 +38,14 @@ dependencies {
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
-        intellijIdea("2025.2.6.2")
+        intellijIdeaCommunity("2024.3.7.1")
         testFramework(TestFrameworkType.Platform)
-        testFramework(TestFrameworkType.Starter, configurationName = "integrationTestImplementation")
+        testFramework(
+            TestFrameworkType.Starter,
+            version = "252.28539.54",
+            configurationName = "integrationTestImplementation",
+        )
+        zipSigner()
     }
 }
 
@@ -52,16 +62,50 @@ intellijPlatform {
     // auxiliary sandbox task before packaging, although plugin compilation and instrumentation succeed.
     buildSearchableOptions = false
     pluginConfiguration {
+        name = "Typstninja"
         ideaVersion {
-            sinceBuild = "252"
-            untilBuild = "252.*"
+            sinceBuild = "243"
+            untilBuild = provider { null }
         }
     }
     pluginVerification {
         ides {
-            recommended()
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2024.3.7.1")
+            create(IntelliJPlatformType.IntellijIdeaCommunity, "2025.2.6.2")
+            create(IntelliJPlatformType.IntellijIdea, "2026.2")
         }
     }
+    signing {
+        privateKey = providers.environmentVariable("PRIVATE_KEY")
+        password = providers.environmentVariable("PRIVATE_KEY_PASSWORD")
+        certificateChain = providers.environmentVariable("CERTIFICATE_CHAIN")
+    }
+    publishing {
+        channels = listOf("default")
+        hidden = true
+        token = providers.environmentVariable("PUBLISH_TOKEN")
+    }
+}
+
+tasks.named<BuildPluginTask>("buildPlugin") {
+    from(layout.projectDirectory.file("LICENSE"))
+    from(layout.projectDirectory.file("src/main/resources/META-INF/third-party-notices.txt")) {
+        rename { "THIRD-PARTY-NOTICES.txt" }
+    }
+}
+
+tasks.named<VerifyPluginTask>("verifyPlugin") {
+    offline = true
+}
+
+tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
+    dependsOn(tasks.named("signPlugin"))
+    certificateChain.set(providers.environmentVariable("VERIFY_CERTIFICATE_CHAIN"))
+    certificateChainFile.set(
+        layout.file(
+            providers.environmentVariable("CERTIFICATE_CHAIN_FILE").map(::File),
+        ),
+    )
 }
 
 val localTypstRuntimeExecutable = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
@@ -79,6 +123,10 @@ val integrationTest by intellijPlatformTesting.testIdeUi.registering {
         systemProperty("typst.test.project.path", layout.projectDirectory.asFile.absolutePath)
         environment("TYPST_RUNTIME_PATH", localTypstRuntimePath.asFile.absolutePath)
     }
+}
+
+tasks.named<KotlinCompile>("compileIntegrationTestKotlin") {
+    compilerOptions.freeCompilerArgs.add("-Xskip-metadata-version-check")
 }
 
 tasks.named<RunIdeTask>("runIde") {

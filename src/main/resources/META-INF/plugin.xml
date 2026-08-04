@@ -1,15 +1,15 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.livteam.typninja</id>
-    <name>Typst</name>
-    <vendor>buyoung</vendor>
+    <name>Typstninja</name>
+    <vendor url="https://github.com/buYoung/intellij-typst">livTeam</vendor>
     <description><![CDATA[
         <p>Native <b>Typst</b> language support for IntelliJ-based IDEs.</p>
         <ul>
             <li>Recognises <code>.typ</code> files as Typst source files.</li>
-            <li>Lexer-based syntax highlighting with customisable colour settings (Settings → Editor → Color Scheme → Typst).</li>
+            <li>A hand-written restartable lexer with customisable syntax highlighting.</li>
             <li>Recoverable parser and PSI that keeps the editor usable on incomplete or malformed input.</li>
-            <li>Conservative code formatter — normalises spacing and indentation inside closed code groups (including multi-line blocks, arrays and dictionaries) while preserving markup prose. Indentation follows Settings → Code Style → Typst.</li>
+            <li>Conservative code formatter for closed single-line and multi-line code groups, blocks, arrays and dictionaries while preserving markup prose.</li>
             <li>Brace matching for <code>()</code>, <code>{}</code> and <code>[]</code>, and code folding for closed multi-line blocks, groups and content blocks.</li>
             <li>Line-comment toggling (<code>//</code>) via the standard Code → Comment with Line Comment action.</li>
             <li>Go To Declaration (Cmd/Ctrl+Click): file-local variables and functions, <code>@reference</code> to its <code>&lt;label&gt;</code>, relative <code>#import</code> paths and imported names, and Typst standard-library builtins.</li>
@@ -18,12 +18,21 @@
             <li>Weak diagnostics for high-confidence unresolved references, labels and relative imports/includes.</li>
             <li>Optional compiler diagnostics on save or after a typing debounce, with stale-result rejection and Typst CLI fallback.</li>
             <li>Automatic HTTPS installation of completed <code>@preview/name:version</code> imports into the Typst package cache.</li>
-            <li>Editor-integrated source, preview and split modes with a token-protected JCEF SVG session and a Swing PNG fallback when JCEF is unavailable.</li>
+            <li>Editor-integrated source, preview and split modes with a token-protected JCEF SVG session. IDE runtimes without JCEF show an explicit unavailable state.</li>
             <li>Quick documentation and signature help for supported user and builtin symbols.</li>
             <li>Structure view, workspace symbol search, occurrence highlighting, URL/relative-path links, color previews, heading intentions and comment-aware Enter handling.</li>
         </ul>
-        <p>The native PSI language services remain available without the optional runtime. Explicit PDF, PNG, SVG and HTML exports continue to use the configured Typst CLI.</p>
+        <p>The native PSI language services remain available without the optional runtime. The plugin may download native runtimes from GitHub Releases and Typst packages from <code>packages.typst.org</code> over HTTPS. It does not collect telemetry or analytics. Explicit PDF, PNG, SVG and HTML exports continue to use the configured Typst CLI.</p>
     ]]></description>
+
+    <change-notes><![CDATA[
+        <p><b>0.1.0</b></p>
+        <ul>
+            <li>Initial Typst language support with a hand-written restartable lexer and recoverable PSI parser.</li>
+            <li>Syntax highlighting, multi-line-aware formatting, navigation, completion, diagnostics and editor services.</li>
+            <li>Optional native runtime for compiler diagnostics, package installation and JCEF-based preview.</li>
+        </ul>
+    ]]></change-notes>
 
     <depends>com.intellij.modules.platform</depends>
 

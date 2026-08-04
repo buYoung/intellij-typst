@@ -1,5 +1,5 @@
-# GitHub Actions Workflow created for handling the release process based on the draft release prepared with the Build workflow.
-# Running the publishPlugin task requires all the following secrets to be provided: PUBLISH_TOKEN, PRIVATE_KEY, PRIVATE_KEY_PASSWORD, CERTIFICATE_CHAIN.
+# GitHub Actions workflow for producing a signed GitHub release.
+# Marketplace publishing remains disabled unless MARKETPLACE_PUBLISH_ENABLED is explicitly set to true.
 # See https://plugins.jetbrains.com/docs/intellij/plugin-signing.html for more information.
 
 name: Release
@@ -33,7 +33,7 @@ jobs:
         with:
           ref: ${{ github.event.release.tag_name }}
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.100.0
+        uses: dtolnay/rust-toolchain@1.92.0
         with:
           targets: ${{ matrix.target }}
       - name: Build runtime
@@ -49,9 +49,8 @@ jobs:
           name: typst-runtime-${{ matrix.target }}
           path: typst-runtime-${{ matrix.target }}*
 
-  # Prepare and publish the plugin to JetBrains Marketplace repository
   release:
-    name: Publish Plugin
+    name: Sign and attach plugin
     needs: [ runtime ]
     runs-on: ubuntu-latest
     permissions:
@@ -111,22 +110,35 @@ jobs:
 
           ./gradlew patchChangelog --release-note-file=$RELEASE_NOTE
 
-      # Publish the plugin to JetBrains Marketplace
+      - name: Sign and verify plugin
+        env:
+          CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
+          CERTIFICATE_CHAIN_FILE: ${{ runner.temp }}/typstninja-certificate-chain.pem
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+          PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
+        run: |
+          printf '%s' "$CERTIFICATE_CHAIN" > "$CERTIFICATE_CHAIN_FILE"
+          chmod 600 "$CERTIFICATE_CHAIN_FILE"
+          ./gradlew signPlugin verifyPluginSignature --console=plain
+
       - name: Publish Plugin
+        if: ${{ vars.MARKETPLACE_PUBLISH_ENABLED == 'true' }}
         env:
           PUBLISH_TOKEN: ${{ secrets.PUBLISH_TOKEN }}
           CERTIFICATE_CHAIN: ${{ secrets.CERTIFICATE_CHAIN }}
           PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
           PRIVATE_KEY_PASSWORD: ${{ secrets.PRIVATE_KEY_PASSWORD }}
-        run: ./gradlew publishPlugin
+        run: ./gradlew publishPlugin --console=plain
 
       # Upload an artifact as a release asset
       - name: Upload Release Asset
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*
+          gh release upload ${{ github.event.release.tag_name }} ./build/distributions/*-signed.zip
           gh release upload ${{ github.event.release.tag_name }} ./build/runtime-assets/*
+          gh release upload ${{ github.event.release.tag_name }} ./LICENSE
+          gh release upload ${{ github.event.release.tag_name }} ./src/main/resources/META-INF/third-party-notices.txt
 
       # Create a pull request
       - name: Create Pull Request

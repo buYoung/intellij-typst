@@ -46,11 +46,11 @@ jobs:
       - name: Fetch Sources
         uses: actions/checkout@v7
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@1.100.0
+        uses: dtolnay/rust-toolchain@1.92.0
         with:
           targets: ${{ matrix.target }}
       - name: Test runtime
-        run: cargo test --manifest-path renderer/Cargo.toml
+        run: cargo test --locked --manifest-path renderer/Cargo.toml
       - name: Build runtime
         run: cargo build --release --locked --manifest-path renderer/Cargo.toml --target ${{ matrix.target }}
       - name: Smoke test runtime
@@ -192,7 +192,7 @@ jobs:
 
       # Run Verify Plugin task and IntelliJ Plugin Verifier tool
       - name: Run Plugin Verification tasks
-        run: ./gradlew verifyPlugin
+        run: ./gradlew verifyPluginProjectConfiguration verifyPluginStructure verifyPlugin --console=plain
 
       # Collect Plugin Verifier Result
       - name: Collect Plugin Verifier Result

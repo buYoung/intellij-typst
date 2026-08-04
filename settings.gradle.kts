@@ -1,10 +1,10 @@
 import org.jetbrains.intellij.platform.gradle.extensions.intellijPlatform
 
-rootProject.name = "IntelliJ Platform Plugin Template"
+rootProject.name = "Typstninja"
 
 pluginManagement {
     plugins {
-        id("org.jetbrains.kotlin.jvm") version "2.4.10"
+        id("org.jetbrains.kotlin.jvm") version "2.0.21"
         id("org.jetbrains.changelog") version "2.5.0"
     }
 }
