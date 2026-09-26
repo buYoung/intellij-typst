@@ -1,0 +1,22 @@
+{
+  "selectedAt": "2026-09-26",
+  "selectedBy": "user",
+  "caseId": "02",
+  "caseName": "모여 있는 눈",
+  "generatedImageId": "exec-ebdf6dca-7b09-45e0-a14b-9a9530a300f5",
+  "file": "typstninja-logo.png",
+  "sha256": "62d65312ff1e883eb88c8e7d1d6aa654b1c5c9c07ec376342d61fbfea992e525",
+  "dimensions": [
+    1254,
+    1254
+  ],
+  "format": "PNG",
+  "alpha": true,
+  "invariants": [
+    "중앙에 가까이 모인 검은 점눈",
+    "청록색 T와 긴 세로획",
+    "하단 두 곡선",
+    "두건과 밝은 얼굴 영역"
+  ],
+  "status": "사용자가 선택한 시각 원본. SVG·테마 파생본·IDE 적용·상점 게시 전."
+}
