@@ -11,9 +11,11 @@
 | 글자형 제품명·워드마크 | [plugin.xml](../../../src/main/resources/META-INF/plugin.xml)의 `Typstninja` | 기본 UI 계열의 산세리프 굵은 제품명. 최종 벡터 원본과 실제 서체·배치 기록은 제작 시 남긴다. |
 | IDE 파일·기능 아이콘 | [아이콘 문서](../components/icons.md) | 선·테마 기준과 코드 소비자는 해당 문서에서 관리한다. |
 | 제품 화면 이미지 | [스크린샷 후보](screenshots-and-previews.md) | 실제 실행 화면을 확보한 후 원본 경로와 버전을 연결한다. 현재 승인된 캡처 파일은 없다. |
-| 상점 소개 이미지 | [구성과 문구](composition-and-copy.md) | 선택한 로고와 실제 제품 캡처로 제작한다. 게시용 이미지 원본은 아직 없다. |
+| 상점 정보형 이미지 | [미리보기](marketplace-images/01-preview.png), [작성 지원](marketplace-images/02-completion.png), [진단](marketplace-images/03-diagnostics.png), [내보내기](marketplace-images/04-export.png) | 동일한 로고·캡션 구성을 사용한 영문 설명 이미지 4장. 실제 IDE 캡처를 대신하는 화면 모형이 아닌 코드·문서·파일 형식 도식이다. |
 
 공식 제출 자산명·규격과 이 역할들의 대응은 [상점별 문서](stores/jetbrains-marketplace.md)에 있다. 새 파일명을 이미 존재하는 자산처럼 적지 않는다.
+
+정보형 이미지 4장의 원본은 모두 1677×938 불투명 RGB PNG다. 상단에는 로고와 제품명, 가운데에는 입력·결과 도식, 하단에는 검은 띠와 흰 고정폭 캡션을 둔다. 기능 설명 이미지는 내장 이미지 생성으로 제작했다. 실제 IDE 스크린샷과 편집 가능한 화면 캡처 템플릿은 별도로 준비한다.
 
 ## 확정한 로고 원본
 
