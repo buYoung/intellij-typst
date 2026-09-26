@@ -136,7 +136,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         component.fontPaths = settings.fontPaths.orEmpty()
         component.typstExtraArguments = settings.typstExtraArguments.orEmpty()
         component.previewPpi = settings.previewPpi
-        component.autoPreview = settings.autoPreview.orEmpty().ifBlank { "onSave" }
+        component.autoPreview = settings.autoPreview.orEmpty().ifBlank { "onType" }
         component.previewArguments = settings.previewArguments.orEmpty()
         component.invertPreviewColors = settings.invertPreviewColors
         component.useNativeRenderer = settings.useNativeRenderer

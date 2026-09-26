@@ -35,6 +35,7 @@ import org.cef.browser.CefBrowser
 import org.cef.browser.CefFrame
 import org.cef.handler.CefLoadHandlerAdapter
 import java.awt.BorderLayout
+import java.awt.Dimension
 import java.awt.FlowLayout
 import java.beans.PropertyChangeListener
 import java.beans.PropertyChangeSupport
@@ -138,7 +139,10 @@ internal class TypstPreviewPanel(
             )
         }
     }
-    private val statusLabel = JLabel("Open a Typst file and choose Preview.")
+    private val statusLabel = JLabel("Open a Typst file and choose Preview.").apply {
+        // Compiler diagnostics must not push the source editor out of the split view.
+        minimumSize = Dimension(0, 0)
+    }
     private val zoomLabel = JLabel("100%")
     private val invertCheckBox = JCheckBox("Invert colors")
     private val renderGeneration = AtomicLong()
@@ -278,6 +282,7 @@ internal class TypstPreviewPanel(
             return
         }
         if (!browserSession.isActive(this)) return
+        statusLabel.toolTipText = result.failureMessage
         when {
             result.isRunning -> {
                 renderGeneration.incrementAndGet()

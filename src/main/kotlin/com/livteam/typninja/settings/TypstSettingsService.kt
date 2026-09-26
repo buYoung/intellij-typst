@@ -37,7 +37,7 @@ class TypstSettingsService(private val project: Project) : SimplePersistentState
         var fontPaths by string("")
         var typstExtraArguments by string("")
         var previewPpi by property(144)
-        var autoPreview by string("onSave")
+        var autoPreview by string("onType")
         var previewArguments by string("")
         var invertPreviewColors by property(false)
         var useNativeRenderer by property(true)

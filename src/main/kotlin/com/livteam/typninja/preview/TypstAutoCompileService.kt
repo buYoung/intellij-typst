@@ -16,10 +16,12 @@ import com.livteam.typninja.language.TypstFileType
 import com.livteam.typninja.settings.TypstSettingsService
 import com.livteam.typninja.runtime.TypstRuntimeService
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.nio.file.Path
+import java.util.concurrent.ConcurrentHashMap
 
 /** Runs configured preview/export tasks on save or after a short typing pause. */
 @Service(Service.Level.PROJECT)
@@ -27,7 +29,7 @@ class TypstAutoCompileService(
     private val project: Project,
     private val coroutineScope: CoroutineScope,
 ) : Disposable {
-    private var typingJob: Job? = null
+    private val scheduledJobs = ConcurrentHashMap<Pair<String, String>, Job>()
 
     init {
         project.messageBus.connect(this).subscribe(
@@ -55,14 +57,19 @@ class TypstAutoCompileService(
         val needsCompilation = settings.autoPreview == trigger ||
             settings.autoExport == trigger ||
             settings.compilerDiagnosticsTrigger.orEmpty().ifBlank { "onSave" } == trigger
-        val packages = PREVIEW_PACKAGE_PATTERN.findAll(document.text).map { it.value }.toSet()
+        val currentText = document.text
+        val documentVersion = document.modificationStamp
+        val packages = PREVIEW_PACKAGE_PATTERN.findAll(currentText).map { it.value }.toSet()
         if (!needsCompilation && packages.isEmpty()) return
-        typingJob?.cancel()
-        typingJob = coroutineScope.launch {
-            if (!immediately) delay(500)
+        val requestKey = file.path to trigger
+        val job = coroutineScope.launch(start = CoroutineStart.LAZY) {
+            if (!immediately) delay(TYPING_DEBOUNCE_MILLIS)
             packages.forEach(TypstRuntimeService.getInstance(project)::ensurePreviewPackage)
-            runConfiguredTasks(file, document.text, document.modificationStamp, trigger)
+            runConfiguredTasks(file, currentText, documentVersion, trigger)
         }
+        scheduledJobs.put(requestKey, job)?.cancel()
+        job.invokeOnCompletion { scheduledJobs.remove(requestKey, job) }
+        job.start()
     }
 
     private fun runConfiguredTasks(file: VirtualFile, currentText: String, documentVersion: Long, trigger: String) {
@@ -95,10 +102,12 @@ class TypstAutoCompileService(
     }
 
     override fun dispose() {
-        typingJob?.cancel()
+        scheduledJobs.values.forEach(Job::cancel)
+        scheduledJobs.clear()
     }
 
     private companion object {
+        const val TYPING_DEBOUNCE_MILLIS = 250L
         val PREVIEW_PACKAGE_PATTERN = Regex("@preview/[A-Za-z0-9_-]+:[0-9A-Za-z.+_-]+")
     }
 }
