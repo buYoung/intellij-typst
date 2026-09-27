@@ -1,0 +1,70 @@
+name: Typst WASM 빌드
+
+on:
+  push:
+    branches: ['**']
+    paths:
+      - 'packages/typst-wasm/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'scripts/release/**'
+      - 'scripts/release.mjs'
+      - 'samples/verify/**'
+      - 'samples/verify-invalid.typ'
+      - 'LICENSE'
+      - '.github/workflows/wasm.yml'
+  pull_request:
+    paths:
+      - 'packages/typst-wasm/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'scripts/release/**'
+      - 'scripts/release.mjs'
+      - 'samples/verify/**'
+      - 'samples/verify-invalid.typ'
+      - 'LICENSE'
+      - '.github/workflows/wasm.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: typst-wasm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - uses: pnpm/action-setup@v6
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          targets: wasm32-unknown-unknown
+      - name: 의존성 설치
+        run: pnpm install --frozen-lockfile
+      - name: 공식 안정 버전 목록 확인
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: pnpm --filter @typstninja/wasm versions:check
+      - name: WASM 빌드 도구 준비
+        run: pnpm wasm:setup
+      - name: 전체 엔진 빌드와 산출물 검증
+        run: pnpm wasm:build
+      - name: 검증된 산출물 보관
+        uses: actions/upload-artifact@v7
+        with:
+          name: typst-wasm
+          path: |
+            packages/typst-wasm/dist/*/*.zip
+            packages/typst-wasm/dist/*/manifest.json
+            packages/typst-wasm/dist/*/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14

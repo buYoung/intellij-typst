@@ -4,3 +4,7 @@
 .intellijPlatform
 .kotlin
 build
+node_modules/
+packages/typst-wasm/dist/
+packages/typst-wasm/target/
+packages/typst-wasm/.tools/

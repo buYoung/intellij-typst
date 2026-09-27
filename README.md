@@ -39,6 +39,19 @@ cargo about generate renderer/about.hbs --locked --all-features \
 ./gradlew runIde
 ```
 
+## 모노레포와 WASM 배포
+
+기존 루트 Gradle 프로젝트는 IntelliJ 플러그인을, `packages/typst-wasm`은 Typst 0.13.0 이후 안정 버전의 WASM 배포를 관리합니다. `packages/typst-plugin`은 `pnpm release` 메뉴를 위한 비활성 자리표시자입니다.
+
+```sh
+pnpm install --frozen-lockfile
+pnpm wasm:setup
+pnpm wasm:build
+pnpm release
+```
+
+`pnpm release`는 배포 대상·버전을 선택하고 WASM 전체 빌드, 커밋·태그·푸시 확인, GitHub Releases 게시, Wiki 갱신 순서로 실행합니다. WASM 묶음 버전은 Typst 엔진과 플러그인 버전으로부터 독립적입니다. 자세한 준비·복구 절차는 [WASM README](packages/typst-wasm/README.md), API와 다운로드는 [GitHub Wiki](https://github.com/buYoung/intellij-typst/wiki/Typst-WASM)를 참고하세요.
+
 ## Source repository
 
 <https://github.com/buYoung/intellij-typst>

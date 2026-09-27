@@ -1,0 +1,20 @@
+{
+  "name": "typstninja-monorepo",
+  "private": true,
+  "packageManager": "pnpm@10.29.2",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "release": "node scripts/release.mjs",
+    "wasm:build": "node packages/typst-wasm/scripts/build.mjs",
+    "wasm:publish": "node scripts/release/publish-wasm.mjs",
+    "wiki:sync": "node scripts/release/sync-wiki.mjs",
+    "wasm:setup": "node packages/typst-wasm/scripts/setup.mjs"
+  },
+  "devDependencies": {
+    "@inquirer/prompts": "8.5.2",
+    "release-it": "21.0.1",
+    "semver": "7.8.5"
+  }
+}

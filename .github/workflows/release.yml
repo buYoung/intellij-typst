@@ -10,6 +10,7 @@ on:
 jobs:
   runtime:
     name: Build runtime (${{ matrix.target }})
+    if: ${{ !startsWith(github.event.release.tag_name, 'typst-wasm-') }}
     strategy:
       fail-fast: false
       matrix:
@@ -51,6 +52,7 @@ jobs:
 
   release:
     name: Sign and attach plugin
+    if: ${{ !startsWith(github.event.release.tag_name, 'typst-wasm-') }}
     needs: [ runtime ]
     runs-on: ubuntu-latest
     permissions:

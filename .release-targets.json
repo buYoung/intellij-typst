@@ -1,0 +1,15 @@
+{
+  "serviceApps": [
+    {
+      "name": "Typst WASM",
+      "path": "packages/typst-wasm",
+      "config": ".release-it.json",
+      "isEnabled": true
+    },
+    {
+      "name": "Typst IntelliJ 플러그인 — 준비 중",
+      "path": "packages/typst-plugin",
+      "isEnabled": false
+    }
+  ]
+}

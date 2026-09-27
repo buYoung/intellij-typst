@@ -1,0 +1,39 @@
+[package]
+name = "typstninja-wasm"
+version = "0.14.0"
+edition = "2021"
+rust-version = "1.92"
+license = "Apache-2.0"
+build = "../../build.rs"
+
+[lib]
+path = "../../src/lib.rs"
+crate-type = ["cdylib"]
+
+[workspace]
+
+[dependencies]
+wasm-bindgen = "=0.2.128"
+serde = { version = "1", features = ["derive"] }
+serde-wasm-bindgen = "0.6"
+console_error_panic_hook = "0.1"
+serde_bytes = "0.11"
+js-sys = "=0.3.105"
+time = { version = "0.3", default-features = false, features = ["std"] }
+typst = "=0.14.0"
+typst-pdf = "=0.14.0"
+typst-svg = "=0.14.0"
+typst-assets = { version = "=0.14.0", features = ["fonts"] }
+
+# Keep Typst internals on the selected engine patch.
+typst-syntax = "=0.14.0"
+typst-macros = "=0.14.0"
+typst-timing = "=0.14.0"
+typst-utils = "=0.14.0"
+
+[profile.release]
+opt-level = "s"
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

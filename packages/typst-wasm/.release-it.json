@@ -1,0 +1,31 @@
+{
+  "$schema": "https://unpkg.com/release-it@21.0.1/schema/release-it.json",
+  "git": {
+    "commit": true,
+    "tag": true,
+    "push": true,
+    "requireBranch": "main",
+    "requireUpstream": true,
+    "tagName": "typst-wasm-v${version}",
+    "tagMatch": "typst-wasm-v[0-9]*",
+    "commitsPath": ".",
+    "addUntrackedFiles": false
+  },
+  "npm": {
+    "publish": false,
+    "versionArgs": [
+      "--ignore-scripts",
+      "--workspaces-update=false"
+    ]
+  },
+  "github": {
+    "release": false
+  },
+  "gitlab": {
+    "release": false
+  },
+  "hooks": {
+    "before:init": "node scripts/versions.mjs --check",
+    "after:bump": "node scripts/build.mjs"
+  }
+}

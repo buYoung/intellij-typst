@@ -1,0 +1,5 @@
+{
+  "name": "@typstninja/plugin",
+  "private": true,
+  "description": "IntelliJ 플러그인 배포 자리표시자. 제품 버전과 소스는 저장소 루트의 Gradle 프로젝트에서 관리한다."
+}
