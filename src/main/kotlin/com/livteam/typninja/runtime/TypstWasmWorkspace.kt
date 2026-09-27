@@ -53,7 +53,9 @@ internal class TypstWasmWorkspace(
 
     fun resolve(displayPath: String): Path? {
         if (!displayPath.startsWith('@')) return safePath(root, displayPath)
-        val separator = displayPath.indexOf('/')
+        val versionSeparator = displayPath.indexOf(':')
+        if (versionSeparator < 0) return null
+        val separator = displayPath.indexOf('/', versionSeparator + 1)
         if (separator < 0) return null
         val specification = displayPath.substring(0, separator)
         val directory = packageDirectories[specification] ?: TypstPackageStorage.find(project, specification) ?: return null

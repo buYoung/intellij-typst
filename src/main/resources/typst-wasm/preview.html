@@ -48,7 +48,7 @@ body.invert .page { filter:invert(1) hue-rotate(180deg) }
  window.typstPreview={
    setScale:v=>{scale=Math.max(.2,Math.min(1,Number(v)||1));pages.style.setProperty('--preview-scale',scale);save()},
    setInvert:v=>{document.body.classList.toggle('invert',!!v);save()},
-   showPage:n=>pages.querySelector('[data-page="'+n+'"]')?.scrollIntoView({block:'start'}),
+   showPage:n=>pages.children[Number(n)-1]?.scrollIntoView({block:'start'}),
    showSelection:(token,n,x,y)=>{pendingSelection={token,page:n,x,y};renderSelection()},
    showPosition:(n,x,y)=>{const page=pages.querySelector('[data-page="'+n+'"]');page?.scrollIntoView({behavior:'smooth',block:'center'});window.typstPreview.showSelection(Date.now(),n,x,y)},
    showPositions:positions=>{let best=null,distance=Infinity;const center=scrollY+innerHeight/2;for(const position of positions||[]){const page=pages.querySelector('[data-page="'+position.page+'"]');if(!page)continue;const point=page.offsetTop+(position.y/Number(page.dataset.height))*page.offsetHeight;const next=Math.abs(point-center);if(next<distance){distance=next;best=position}}if(best)window.typstPreview.showPosition(best.page,best.x,best.y)},
