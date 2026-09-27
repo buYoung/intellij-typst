@@ -9,8 +9,13 @@ import { syncWiki } from './sync-wiki.mjs';
 function existingRelease(tag) {
   try { return JSON.parse(capture('gh', ['api', `repos/${repository}/releases/tags/${tag}`])); }
   catch (error) {
-    if (String(error.stderr).includes('HTTP 404')) return null;
-    throw error;
+    if (!String(error.stderr).includes('HTTP 404')) throw error;
+    // GitHub's tag endpoint omits drafts until the tag exists. The authenticated
+    // release list includes these drafts, which must be resumed, not recreated.
+    const pages = JSON.parse(capture('gh', ['api', `repos/${repository}/releases`, '--paginate', '--slurp']));
+    const drafts = pages.flat().filter(item => item.draft && item.tag_name === tag);
+    if (drafts.length > 1) throw new Error(`Multiple drafts use ${tag}; resolve them before publishing.`);
+    return drafts[0] ?? null;
   }
 }
 
@@ -32,6 +37,7 @@ export async function publishWasm() {
       const prerelease = manifest.releaseVersion.includes('-') ? ['--prerelease'] : [];
       run('gh', ['release', 'create', manifest.tag, '--repo', repository, '--target', commit, '--draft', '--latest=false', ...prerelease, '--title', `Typst WASM ${manifest.releaseVersion}`, '--notes-file', notesPath]);
       release = existingRelease(manifest.tag);
+      if (!release) throw new Error('Created draft could not be read. Retry publishing after inspecting GitHub Releases.');
     }
     let remoteRef;
     try { remoteRef = JSON.parse(capture('gh', ['api', `repos/${repository}/git/ref/tags/${manifest.tag}`])); }

@@ -40,7 +40,9 @@ try {
     run('cargo', ['build', '--release', '--locked', '--target', manifest.target, '--manifest-path', engineManifest, '--target-dir', target]);
     const engineOutput = path.join(staging, version);
     mkdirSync(engineOutput);
-    run(executable('wasm-bindgen'), [path.join(target, manifest.target, 'release/typstninja_wasm.wasm'), '--target', 'web', '--out-name', 'typst_wasm', '--out-dir', engineOutput]);
+    // Distinct library names keep cached outputs from different engines apart.
+    const libraryName = `typstninja_wasm_v${version.replaceAll('.', '_')}`;
+    run(executable('wasm-bindgen'), [path.join(target, manifest.target, 'release', `${libraryName}.wasm`), '--target', 'web', '--out-name', 'typst_wasm', '--out-dir', engineOutput]);
     for (const file of ['index.js', 'index.d.ts']) copyFileSync(path.join(packageRoot, 'src', file), path.join(engineOutput, file));
     for (const [source, name] of [[path.join(repoRoot, 'LICENSE'), 'LICENSE'], [path.join(packageRoot, 'README.md'), 'README.md']]) {
       copyFileSync(source, path.join(engineOutput, name));
