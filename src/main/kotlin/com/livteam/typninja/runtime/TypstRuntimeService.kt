@@ -11,6 +11,7 @@ import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.Logger
 import com.intellij.openapi.fileEditor.FileDocumentManager
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.Disposer
 import com.intellij.openapi.vfs.VirtualFile
 import com.intellij.openapi.vfs.VirtualFileManager
 import com.livteam.typninja.language.analysis.TypstProjectModelService
@@ -77,11 +78,11 @@ class TypstRuntimeService(private val project: Project, private val coroutineSco
             val compilation = compileWasm(previewSource, changedSource, unsavedText, if (render) "svg" else "check", render) { result ->
                 if (render && previewGeneration.get() == requestedPreviewGeneration && result.output["isSuccess"].asBoolean) {
                     if (previewServerSourcePath != previewSource.path) {
-                        previewServer?.dispose()
+                        previewServer?.let { Disposer.dispose(it) }
                         previewServer = null
                         previewServerSourcePath = previewSource.path
                     }
-                    val server = previewServer ?: TypstPreviewServer().also { previewServer = it }
+                    val server = previewServer ?: createPreviewServer().also { previewServer = it }
                     server.update(currentGeneration, result.output)
                     previewSnapshot = PreviewSnapshot(currentGeneration, documentVersion, previewSource.path, result.workspace)
                 }
@@ -229,6 +230,17 @@ class TypstRuntimeService(private val project: Project, private val coroutineSco
     private fun matchingSnapshot(source: VirtualFile, documentVersion: Long, runtimeGeneration: Long): PreviewSnapshot? =
         previewSnapshot?.takeIf { it.sourcePath == source.path && it.documentVersion == documentVersion && it.generation == runtimeGeneration && compiler?.isUsable == true }
 
+    private fun createPreviewServer(): TypstPreviewServer {
+        val server = TypstPreviewServer()
+        try {
+            Disposer.register(this, server)
+            return server
+        } catch (failure: Throwable) {
+            server.dispose()
+            throw failure
+        }
+    }
+
     fun ensurePreviewPackage(specification: String) {
         val spec = TypstPackageResolver.parse(specification) ?: return
         if (spec.namespace != "preview" || !TypstSettingsService.getInstance(project).state.autoDownloadPackages) return
@@ -254,7 +266,7 @@ class TypstRuntimeService(private val project: Project, private val coroutineSco
 
     override fun dispose() {
         diagnosticJobs.values.forEach(Job::cancel)
-        previewServer?.dispose()
+        previewServer?.let { Disposer.dispose(it) }
         previewServer = null
         compiler = null
         previewSnapshot = null

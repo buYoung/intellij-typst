@@ -73,7 +73,7 @@ internal class TypstWasmWorkspace(
             }
         }
         val file = safePath(directory, path) ?: return false
-        val text = if (specification == null) overlays[file] else null
+        val text = overlays[file]
         val bytes = text?.toByteArray(Charsets.UTF_8) ?: run {
             if (!Files.isRegularFile(file) || !file.toRealPath().startsWith(directory.toRealPath())) return false
             Files.readAllBytes(file)

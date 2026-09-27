@@ -9,9 +9,11 @@ import com.sun.net.httpserver.HttpServer
 import java.net.InetSocketAddress
 import java.security.MessageDigest
 import java.util.UUID
+import java.util.concurrent.atomic.AtomicBoolean
 
 /** Serves already-rendered WASM pages; compilation never depends on the browser. */
 internal class TypstPreviewServer : Disposable {
+    private val isDisposed = AtomicBoolean()
     private val token = UUID.randomUUID().toString().replace("-", "")
     private val executor = AppExecutorUtil.createBoundedApplicationPoolExecutor("Typst WASM preview", 2)
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
@@ -71,5 +73,10 @@ internal class TypstPreviewServer : Disposable {
         exchange.responseBody.write(body)
     }
 
-    override fun dispose() { server.stop(0); executor.shutdownNow() }
+    override fun dispose() {
+        if (isDisposed.compareAndSet(false, true)) {
+            server.stop(0)
+            executor.shutdownNow()
+        }
+    }
 }
