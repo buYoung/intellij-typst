@@ -4,6 +4,9 @@
 .intellijPlatform
 .kotlin
 build
+/out/
+/allure-results/
+/.agents/orchestration/typst-lang-core-02/proof/token_dump.txt
 node_modules/
 packages/typst-wasm/dist/
 packages/typst-wasm/target/

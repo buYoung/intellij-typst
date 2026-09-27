@@ -7,7 +7,8 @@
 | 자산 | 사용할 원본·연결 | 상태와 적용 방법 |
 | --- | --- | --- |
 | 선택한 제품 심볼 | [typstninja-logo.png](logo/typstninja-logo.png) | 사용자 선택: 02번 ‘모여 있는 눈’. 1254×1254 투명 PNG이며 후속 제작의 시각 기준이다. |
-| 현재 패키지 로고 | [pluginIcon.svg](../../../src/main/resources/META-INF/pluginIcon.svg), [pluginIcon_dark.svg](../../../src/main/resources/META-INF/pluginIcon_dark.svg) | 기존 채움형 T. 선택한 로고의 SVG·테마별 파생본은 아직 이 경로에 적용하지 않았다. |
+| 벡터 원본 | [typstninja-logo.svg](logo/typstninja-logo.svg) | 선택 PNG를 Quiver MCP의 Arrow 2로 벡터화한 원본. 가까운 점눈·T 실루엣·하단 두 곡선을 유지한다. |
+| 현재 패키지 로고 | [pluginIcon.svg](../../../src/main/resources/META-INF/pluginIcon.svg), [pluginIcon_dark.svg](../../../src/main/resources/META-INF/pluginIcon_dark.svg) | 선택 로고의 40×40 SVG 적용 완료. 두 배경에서 같은 색상과 도형을 사용한다. [크기·배경 비교](logo/vectorization-review.png), [변환 기록](logo/vectorization.json) |
 | 글자형 제품명·워드마크 | [plugin.xml](../../../src/main/resources/META-INF/plugin.xml)의 `Typstninja` | 기본 UI 계열의 산세리프 굵은 제품명. 최종 벡터 원본과 실제 서체·배치 기록은 제작 시 남긴다. |
 | IDE 파일·기능 아이콘 | [아이콘 문서](../components/icons.md) | 선·테마 기준과 코드 소비자는 해당 문서에서 관리한다. |
 | 제품 화면 이미지 | [스크린샷 후보](screenshots-and-previews.md) | 실제 실행 화면을 확보한 후 원본 경로와 버전을 연결한다. 현재 승인된 캡처 파일은 없다. |
@@ -23,11 +24,11 @@
 
 중앙에 가까이 모인 검은 점눈, 긴 T의 세로획, 하단 두 곡선, 청록색 두건이 식별 기준이다. 표정·세부 요소의 규칙은 [시각 언어](visual-language.md)를 따른다. 후속 자산은 선택한 원본을 기준으로 사용하며 다른 시안을 기준 로고로 혼용하지 않는다.
 
-## 기존 로고의 구조와 적용 경계
+## 교체 전 로고의 구조와 적용 경계
 
-기본·어두운 로고 모두 원본 좌표계가 `0 0 40 40`이다. 배경 사각형은 `(0, 0)`부터 `(40, 40)`까지, 모서리 값은 `rx="6"`이다. T 경로는 `x=10…30`, `y=10…30` 범위에 있다. 두 파일은 배경 색만 다르다.
+교체 전 기본·어두운 로고 모두 원본 좌표계가 `0 0 40 40`이었다. 배경 사각형은 `(0, 0)`부터 `(40, 40)`까지, 모서리 값은 `rx="6"`이다. T 경로는 `x=10…30`, `y=10…30` 범위에 있다. 두 파일은 배경 색만 달랐다. 현재 패키지 로고는 위 벡터 원본에서 파생했으며 `viewBox="0 0 80 80"`과 `width="40" height="40"`을 사용한다.
 
-이 수치는 **기존 원본의 관측값**이다. 이미지에 제품 화면이나 제목을 배치하는 템플릿 영역이 아니며, 여백의 납품 기준도 아니다. 현재 배경 도형은 원본 끝까지 차 있으므로, 새 로고에서는 [상점의 투명 여백 권고](stores/jetbrains-marketplace.md)를 별도로 적용한다.
+이 수치는 **교체 전 원본의 관측값**이다. 이미지에 제품 화면이나 제목을 배치하는 템플릿 영역이 아니며, 여백의 납품 기준도 아니다. 새 패키지 SVG에는 배경 도형이 없으며 [상점의 투명 여백 권고](stores/jetbrains-marketplace.md)를 따른다.
 
 시안을 만들 때는 T의 식별과 [색의 역할](visual-language.md)을 유지하면서 두건·눈매를 통합한다. 최종 외곽·시각적 무게·여백은 로고 사용 크기에 맞춰 조정한다. 원본의 전체 배경 사각형이나 흰색 채움을 필수 형상으로 복제하지 않는다. 부위별 구성과 JSONinja와의 비교 기준은 [시각 언어](visual-language.md)가 소유한다.
 

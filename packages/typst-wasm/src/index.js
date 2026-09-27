@@ -17,14 +17,17 @@ export async function createCompiler({ wasm } = {}) {
     removeFile: path => use(() => compiler.remove_file(path)),
     resetFiles: () => use(() => compiler.reset_files()),
     addFont: data => use(() => compiler.add_font(data)),
+    resetFonts: () => use(() => compiler.reset_fonts()),
+    documentToSource: (page, x, y) => use(() => compiler.document_to_source(page, x, y)),
+    sourceToDocument: (path, utf16Offset) => use(() => compiler.source_to_document(path, utf16Offset)),
     setInputs: inputs => use(() => compiler.set_inputs(inputs)),
-    compile: ({ mainPath = '/main.typ', format = 'pdf', timestampMillis = Date.now(), utcOffsetMinutes = -new Date().getTimezoneOffset() } = {}) =>
+    compile: ({ mainPath = '/main.typ', format = 'pdf', timestampMillis = Date.now(), utcOffsetMinutes = -new Date().getTimezoneOffset(), ...options } = {}) =>
       use(() => {
         if (!Number.isFinite(timestampMillis)) throw new TypeError('timestampMillis must be a finite number');
         if (!Number.isInteger(utcOffsetMinutes) || Math.abs(utcOffsetMinutes) >= 1440) {
           throw new RangeError('utcOffsetMinutes must be an integer between -1439 and 1439');
         }
-        return compiler.compile(mainPath, format, timestampMillis, utcOffsetMinutes);
+        return compiler.compile_with_options(mainPath, timestampMillis, utcOffsetMinutes, { format, ...options });
       }),
     dispose() {
       if (isDisposed) return;

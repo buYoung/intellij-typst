@@ -1456,6 +1456,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 
 [[package]]
+name = "pixglyph"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "47945e80a49d08350e4a007ac4294c6498d23956c18ea5e6ff480dc93d31643c"
+dependencies = [
+ "ttf-parser",
+]
+
+[[package]]
 name = "plist"
 version = "1.10.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2330,6 +2339,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-ide"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cc438f225257f69351d06ec36a98e4a199f8206032edcabd46f5a2a7d04df2b1"
+dependencies = [
+ "comemo",
+ "ecow",
+ "indexmap",
+ "rustc-hash",
+ "serde",
+ "typst",
+ "typst-eval",
+ "typst-html",
+ "typst-layout",
+ "typst-utils",
+ "unscanny",
+]
+
+[[package]]
 name = "typst-layout"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2493,6 +2521,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-render"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "040ab6e56e91099963ef69dd9f0d284adda66c066b742f1866a20b8295ebb2e3"
+dependencies = [
+ "bytemuck",
+ "comemo",
+ "hayro",
+ "image",
+ "libm",
+ "pixglyph",
+ "resvg",
+ "tiny-skia",
+ "ttf-parser",
+ "typst-assets",
+ "typst-layout",
+ "typst-library",
+ "typst-macros",
+ "typst-timing",
+ "typst-utils",
+]
+
+[[package]]
 name = "typst-svg"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2571,17 +2622,22 @@ dependencies = [
 name = "typstninja-wasm"
 version = "0.15.0"
 dependencies = [
+ "comemo",
  "console_error_panic_hook",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",
+ "serde_json",
  "time",
  "typst",
  "typst-assets",
+ "typst-html",
+ "typst-ide",
  "typst-layout",
  "typst-macros",
  "typst-pdf",
+ "typst-render",
  "typst-svg",
  "typst-syntax",
  "typst-timing",

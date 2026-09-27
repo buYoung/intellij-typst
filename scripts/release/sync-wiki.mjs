@@ -19,6 +19,7 @@ export async function syncWiki(tag = tagFor(packageVersion())) {
     for (const engine of manifest.engines) {
       if (!/^0\.\d+\.\d+$/.test(engine.version) || !/^[a-f0-9]{64}$/.test(engine.sha256) || !Number.isSafeInteger(engine.sizeBytes) || engine.sizeBytes < 1 || !engine.verification?.isModuleLoaded) throw new Error('Invalid published engine metadata');
       if (!checksums.split('\n').includes(`${engine.sha256}  typst-wasm-${engine.version}.zip`)) throw new Error('Published engine checksum mismatch');
+      if (manifest.apiVersion >= 2 && (!engine.verification?.isRawModuleLoaded || !/^[a-f0-9]{64}$/.test(engine.rawWasmSha256) || engine.rawWasmSizeBytes < 1)) throw new Error('Invalid raw WASM metadata');
       if (engine.url !== `https://github.com/${repository}/releases/download/${tag}/typst-wasm-${engine.version}.zip`) throw new Error('Unexpected asset URL');
     }
     const wiki = path.join(directory, 'wiki');
@@ -32,7 +33,7 @@ export async function syncWiki(tag = tagFor(packageVersion())) {
     if (!home.includes('(Typst-WASM-Versions)')) home += '\n- [Typst WASM 버전별 다운로드](Typst-WASM-Versions)\n';
     writeFileSync(homePath, home);
     const rows = manifest.engines.map(engine => `| ${engine.version} | [ZIP](${engine.url}) | ${engine.sizeBytes.toLocaleString('en-US')} | \`${engine.sha256}\` |`);
-    const page = `# Typst WASM 버전별 다운로드\n\n배포 묶음: **${manifest.releaseVersion}** · [GitHub Release](${release.url})\n\n이 목록은 게시된 manifest를 기준으로 생성한다. 엔진 버전과 배포 묶음 버전은 별개다.\n\n| Typst 엔진 | 다운로드 | ZIP 크기(bytes) | SHA-256 |\n| --- | --- | ---: | --- |\n${rows.join('\n')}\n\n[manifest.json](https://github.com/${repository}/releases/download/${tag}/manifest.json) · [SHA256SUMS](https://github.com/${repository}/releases/download/${tag}/SHA256SUMS)\n\n타깃: \`${manifest.target}\`, wasm-bindgen: \`${manifest.wasmBindgenVersion}\`. WASM 인스턴스 생성과 버전 일치 검증을 통과한 산출물이다. 기능·제약은 [사용법](Typst-WASM)을 따른다.\n`;
+    const page = `# Typst WASM 버전별 다운로드\n\n배포 묶음: **${manifest.releaseVersion}** · [GitHub Release](${release.url})\n\n이 목록은 게시된 manifest를 기준으로 생성한다. 엔진 버전과 배포 묶음 버전은 별개다.\n\n| Typst 엔진 | 다운로드 | ZIP 크기(bytes) | SHA-256 |\n| --- | --- | ---: | --- |\n${rows.join('\n')}\n\n[manifest.json](https://github.com/${repository}/releases/download/${tag}/manifest.json) · [SHA256SUMS](https://github.com/${repository}/releases/download/${tag}/SHA256SUMS)\n\n타깃: \`${manifest.target}\`, wasm-bindgen: \`${manifest.wasmBindgenVersion}\`. 브라우저·raw WASM 인스턴스 생성, 버전 일치, 기존 문서의 PDF·SVG·진단 검증을 통과한 산출물이다. 각 ZIP에는 JVM용 typst_wasm_raw.wasm도 포함되며 두 WASM의 크기와 SHA-256은 manifest에서 확인한다. 기능·제약은 [사용법](Typst-WASM)을 따른다.\n`;
     writeFileSync(path.join(wiki, 'Typst-WASM-Versions.md'), page);
     if (!wikiGit(['status', '--porcelain'])) { console.info('Wiki is already current.'); return; }
     const branch = wikiGit(['branch', '--show-current']);

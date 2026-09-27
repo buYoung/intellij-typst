@@ -16,21 +16,21 @@
             <li>Declaration-side Find Usages for supported file-local <code>#let</code> variables and functions.</li>
             <li>Contextual completion for local symbols, import members, labels, named arguments, relative paths, keywords and known Typst standard-library symbols.</li>
             <li>Weak diagnostics for high-confidence unresolved references, labels and relative imports/includes.</li>
-            <li>Optional compiler diagnostics on save or after a typing debounce, with stale-result rejection and Typst CLI fallback.</li>
+            <li>Optional compiler diagnostics on save or after a typing debounce, with stale-result rejection and JVM-hosted Typst WASM.</li>
             <li>Automatic HTTPS installation of completed <code>@preview/name:version</code> imports into the Typst package cache.</li>
             <li>Editor-integrated source, preview and split modes with a token-protected JCEF SVG session. IDE runtimes without JCEF show an explicit unavailable state.</li>
             <li>Quick documentation and signature help for supported user and builtin symbols.</li>
             <li>Structure view, workspace symbol search, occurrence highlighting, URL/relative-path links, color previews, heading intentions and comment-aware Enter handling.</li>
         </ul>
-        <p>The native PSI language services remain available without the optional runtime. The plugin may download native runtimes from GitHub Releases and Typst packages from <code>packages.typst.org</code> over HTTPS. It does not collect telemetry or analytics. Explicit PDF, PNG, SVG and HTML exports continue to use the configured Typst CLI.</p>
+        <p>The latest Typst WASM engine is bundled; additional supported versions can be downloaded from GitHub Releases and Typst packages from <code>packages.typst.org</code> over HTTPS. It does not collect telemetry or analytics. PDF, PNG, SVG and HTML exports run through WASM inside the IDE JVM, including environments without JCEF. No Typst CLI installation is required.</p>
     ]]></description>
 
     <change-notes><![CDATA[
-        <p><b>0.1.0</b></p>
+        <p><b>0.2.0</b></p>
         <ul>
-            <li>Initial Typst language support with a hand-written restartable lexer and recoverable PSI parser.</li>
-            <li>Syntax highlighting, multi-line-aware formatting, navigation, completion, diagnostics and editor services.</li>
-            <li>Optional native runtime for compiler diagnostics, package installation and JCEF-based preview.</li>
+            <li>Run compilation, diagnostics, previews and PDF/PNG/SVG/HTML exports through WASM, without a Typst CLI.</li>
+            <li>Set the first planned JetBrains Marketplace release version to 0.2.0.</li>
+            <li>Replace the packaged plugin logo with the selected ninja-style T symbol, vectorized for light and dark backgrounds.</li>
         </ul>
     ]]></change-notes>
 
@@ -149,13 +149,13 @@
         <action id="com.livteam.typninja.preview"
                 class="com.livteam.typninja.language.actions.TypstPreviewAction"
                 text="Preview Typst"
-                description="Compile the current Typst file with the detected or configured Typst executable">
+                description="Compile the current Typst file with the selected Typst WASM engine">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
         <action id="com.livteam.typninja.export"
                 class="com.livteam.typninja.language.actions.TypstExportAction"
                 text="Export Typst"
-                description="Export the current Typst file with the detected or configured Typst executable">
+                description="Export the current Typst file with the selected Typst WASM engine">
             <add-to-group group-id="ToolsMenu" anchor="last"/>
         </action>
     </actions>

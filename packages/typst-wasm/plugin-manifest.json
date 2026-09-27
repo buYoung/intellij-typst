@@ -1,0 +1,467 @@
+{
+  "releaseVersion": "0.2.0",
+  "engines": [
+    {
+      "version": "0.13.0",
+      "file": "typst-wasm-0.13.0.zip",
+      "sizeBytes": 25251257,
+      "sha256": "810b550692264e17fe391e59d5bcb8ed0149d5ee2c5075748f014566e24b85a9",
+      "wasmSizeBytes": 27491175,
+      "wasmSha256": "7788ab2ebfcfa51394506440fd6c6fc03ba41b8fee8633db74c8e46515aa6307",
+      "rawWasmSizeBytes": 28301778,
+      "rawWasmSha256": "5fc63f2dbe26a5038d1de7fcd104a5a38aac599f64bc90895f2f44164aeae0f8",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.13.0.zip"
+    },
+    {
+      "version": "0.13.1",
+      "file": "typst-wasm-0.13.1.zip",
+      "sizeBytes": 25254281,
+      "sha256": "775ca8925c00ee0d08378eb1608577d51afd4027a9bb6a7d46f81c4473c0cd4e",
+      "wasmSizeBytes": 27492217,
+      "wasmSha256": "2a80db725d23ac44cf59124840059e82c6f2068e9bfd0a4f7e4ef5303af7f354",
+      "rawWasmSizeBytes": 28304282,
+      "rawWasmSha256": "9285c932a56c26f87a900b9fc74cfef9608455a76c07ab179d26282b0025f8bc",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.13.1.zip"
+    },
+    {
+      "version": "0.14.0",
+      "file": "typst-wasm-0.14.0.zip",
+      "sizeBytes": 28921388,
+      "sha256": "24ffb299d14298f4995b93b21ebfcb2251d3f483cb5ead0ecf07b19d55b7c302",
+      "wasmSizeBytes": 33020743,
+      "wasmSha256": "ae90301e6abe7e9db353544a849dd956302732f36125d2b0bbb775a4d9e136fb",
+      "rawWasmSizeBytes": 34008838,
+      "rawWasmSha256": "13605f1bac6bd762a788cfa93acab9b48ba0d9158521cae607c716af46d2223e",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.14.0.zip"
+    },
+    {
+      "version": "0.14.1",
+      "file": "typst-wasm-0.14.1.zip",
+      "sizeBytes": 28963829,
+      "sha256": "7f3861646fbe62683ff999892c348c57f7187678a13a703039a50282e7344990",
+      "wasmSizeBytes": 33079695,
+      "wasmSha256": "a16fc31c15bfc77011260c9b8a28d0481ee52ffa083a7c41c749b6d27af57ce3",
+      "rawWasmSizeBytes": 34068761,
+      "rawWasmSha256": "948cab93803f2c05aa9fc3de965c16571ccf05559e9d58956823c7194635d208",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.14.1.zip"
+    },
+    {
+      "version": "0.14.2",
+      "file": "typst-wasm-0.14.2.zip",
+      "sizeBytes": 28961135,
+      "sha256": "2fd000b23fb83ce8142550e68badfbe01abad2624e76c0f3f3e175387b44c6ae",
+      "wasmSizeBytes": 33076647,
+      "wasmSha256": "e732d80ff8bf5f4d8952af0be72b221be0b5d58ac3ced282e784aaae64f1e17d",
+      "rawWasmSizeBytes": 34066784,
+      "rawWasmSha256": "422b43e44c3924e21a6abe50132a681ab9a15bd4e840d17ef9cf0d84a2688caa",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.14.2.zip"
+    },
+    {
+      "version": "0.15.0",
+      "file": "typst-wasm-0.15.0.zip",
+      "sizeBytes": 31021780,
+      "sha256": "a573c39e40cc81daf54f24ee29d192fa5d728eb50855d4ba40fa18349867501b",
+      "wasmSizeBytes": 36117450,
+      "wasmSha256": "0902628cf9a0517eb9468abc9cc831eed5fe8db1cddfca8ab7171001d8ec5797",
+      "rawWasmSizeBytes": 37094172,
+      "rawWasmSha256": "a081b478b81e6168daeed2e2c9bbe7ee455779267c9ed9310129c2a161b2d2be",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.15.0.zip"
+    },
+    {
+      "version": "0.15.1",
+      "file": "typst-wasm-0.15.1.zip",
+      "sizeBytes": 31023463,
+      "sha256": "c3659670915e67de2015a8851a3265958ee64bdfd7f37808831813b52da03d82",
+      "wasmSizeBytes": 36119386,
+      "wasmSha256": "35829f607967690cd7f709d60b5e36b394e1de3da7755b45a063886288b7ad78",
+      "rawWasmSizeBytes": 37097462,
+      "rawWasmSha256": "8376ae3101d88bed641a150ceed4bf84e80495ec6afdf37ff6b26b9340b27f10",
+      "verification": {
+        "isModuleLoaded": true,
+        "isRawModuleLoaded": true,
+        "compiled": [
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "browser",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/00-markup.typ",
+            "format": "svg",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "pdf",
+            "pageCount": 1
+          },
+          {
+            "backend": "raw",
+            "file": "samples/verify/04-math.typ",
+            "format": "svg",
+            "pageCount": 1
+          }
+        ],
+        "hasDiagnostics": true
+      },
+      "url": "https://github.com/buYoung/intellij-typst/releases/download/typst-wasm-v0.2.0/typst-wasm-0.15.1.zip"
+    }
+  ]
+}

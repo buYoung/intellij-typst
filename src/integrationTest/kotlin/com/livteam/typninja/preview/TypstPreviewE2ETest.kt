@@ -79,7 +79,6 @@ class TypstPreviewE2ETest {
         settings.getState().apply {
             setPackagePath(projectPath.resolve("samples/verify/packages").toString())
             setAutoDownloadPackages(false)
-            setUseNativeRenderer(true)
         }
     }
 
@@ -100,7 +99,7 @@ class TypstPreviewE2ETest {
         val previewService = service(TypstPreviewServiceRef::class, project)
         val fileEditorManager = service(FileEditorManager::class, project)
         val result = waitFor(
-            "native preview for $fileName",
+            "WASM preview for $fileName",
             2.minutes,
             200.milliseconds,
             { result: TypstPreviewResultRef? ->
@@ -121,7 +120,7 @@ class TypstPreviewE2ETest {
         check(completed.getFailureMessage() == null) {
             "$fileName preview failed: ${completed.getFailureMessage()}"
         }
-        return requireNotNull(completed.getPreviewUrl()) { "$fileName did not produce a native preview URL" }
+        return requireNotNull(completed.getPreviewUrl()) { "$fileName did not produce a WASM preview URL" }
     }
 
     private fun Driver.waitForPreviewPage(expectedUrl: String) {
@@ -307,7 +306,6 @@ private interface TypstSettingsServiceRef {
 private interface TypstSettingsStateRef {
     fun setPackagePath(value: String)
     fun setAutoDownloadPackages(value: Boolean)
-    fun setUseNativeRenderer(value: Boolean)
 }
 
 @Remote("com.livteam.typninja.preview.TypstPreviewService", plugin = "com.livteam.typninja")

@@ -188,7 +188,7 @@ internal class TypstPreviewPanel(
     }
 
     init {
-        Disposer.register(project, this)
+        Disposer.register(browserSession, this)
         invertCheckBox.isSelected = TypstSettingsService.getInstance(project).state.invertPreviewColors
         removeServiceListener = TypstPreviewService.getInstance(project).addListener { result ->
             acceptResult(result, shouldRefreshLoadedPreview = true)

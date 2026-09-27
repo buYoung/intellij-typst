@@ -1231,6 +1231,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "57c0d7b74b563b49d38dae00a0c37d4d6de9b432382b2892f0574ddcae73fd0a"
 
 [[package]]
+name = "pathdiff"
+version = "0.2.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "df94ce210e5bc13cb6651479fa48d14f601d9858cfe0467f43ae157023b938d3"
+
+[[package]]
 name = "pdf-writer"
 version = "0.12.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1301,6 +1307,15 @@ name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
+
+[[package]]
+name = "pixglyph"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d15afa937836bf3d876f5a04ce28810c06045857bf46c3d0d31073b8aada5494"
+dependencies = [
+ "ttf-parser",
+]
 
 [[package]]
 name = "plist"
@@ -2219,6 +2234,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-ide"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f93184966a4895fa8c3c14669c87bb704cd98e53ecf984307f4f04d92f789de1"
+dependencies = [
+ "comemo",
+ "ecow",
+ "if_chain",
+ "pathdiff",
+ "serde",
+ "typst",
+ "typst-eval",
+ "unscanny",
+]
+
+[[package]]
 name = "typst-layout"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2370,6 +2401,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "typst-render"
+version = "0.13.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2e76277edcc37998910fa4a2e403056cdadd25e0f85dfbef1e98ac0377d9f04e"
+dependencies = [
+ "bytemuck",
+ "comemo",
+ "image",
+ "pixglyph",
+ "resvg",
+ "tiny-skia",
+ "ttf-parser",
+ "typst-library",
+ "typst-macros",
+ "typst-timing",
+]
+
+[[package]]
 name = "typst-svg"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2436,16 +2485,21 @@ dependencies = [
 name = "typstninja-wasm"
 version = "0.13.1"
 dependencies = [
+ "comemo",
  "console_error_panic_hook",
  "js-sys",
  "serde",
  "serde-wasm-bindgen",
  "serde_bytes",
+ "serde_json",
  "time",
  "typst",
  "typst-assets",
+ "typst-html",
+ "typst-ide",
  "typst-macros",
  "typst-pdf",
+ "typst-render",
  "typst-svg",
  "typst-syntax",
  "typst-timing",

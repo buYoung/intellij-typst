@@ -14,7 +14,14 @@ import com.livteam.typninja.language.psi.TypstRef
 import com.livteam.typninja.language.psi.TypstReferenceExpression
 import java.nio.file.Files
 import java.nio.file.Path
-import java.util.concurrent.TimeUnit
+import com.livteam.typninja.runtime.TypstWasmInstaller
+import com.livteam.typninja.runtime.TypstWasmRuntime
+import com.livteam.typninja.runtime.TypstWasmWorkspace
+import com.livteam.typninja.runtime.TypstWasmOptions
+import com.livteam.typninja.settings.TypstSettingsService
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 /** End-to-end acceptance tests for the executable Typst 0.15 verification corpus. */
 class Typst015VerificationCorpusTest : BasePlatformTestCase() {
@@ -158,40 +165,26 @@ class Typst015VerificationCorpusTest : BasePlatformTestCase() {
         assertEquals(Files.readString(path), file.text)
     }
 
-    fun testTypstCli0151CompilesMainAndEveryStandaloneModule() {
-        val version = runProcess(listOf("typst", "--version"), repositoryRoot)
-        assertTrue("Typst CLI 0.15.1 is required, found: ${version.output}",
-            version.exitCode == 0 && version.output.contains("typst 0.15.1"))
-
-        val outputDirectory = Files.createTempDirectory("typst-015-corpus")
+    fun testTypstWasm0151CompilesMainAndEveryStandaloneModule() {
+        val settings = TypstSettingsService.getInstance(project)
+        settings.state.rootPath = repositoryRoot.toString()
+        settings.state.packagePath = samplesRoot.resolve("verify/packages").toString()
+        settings.state.autoDownloadPackages = false
         val inputs = listOf(samplesRoot.resolve("verify.typ")) +
             Files.list(samplesRoot.resolve("verify")).use { paths ->
-                paths.filter { Files.isRegularFile(it) && it.fileName.toString().matches(Regex("0\\d-.*\\.typ")) }
-                    .sorted()
-                    .toList()
+                paths.filter { Files.isRegularFile(it) && it.fileName.toString().matches(Regex("0\\d-.*\\.typ")) }.sorted().toList()
             }
-        inputs.forEach { input ->
-            val output = outputDirectory.resolve(input.fileName.toString().removeSuffix(".typ") + ".pdf")
-            val result = runProcess(
-                listOf(
-                    "typst", "compile", "--package-path", samplesRoot.resolve("verify/packages").toString(),
-                    input.toString(), output.toString(),
-                ),
-                repositoryRoot,
-            )
-            assertEquals("Typst failed for ${samplesRoot.relativize(input)}:\n${result.output}", 0, result.exitCode)
-            assertTrue("Typst did not create $output", Files.isRegularFile(output) && Files.size(output) > 0)
+        runBlocking {
+            val module = TypstWasmInstaller.resolve("0.15.1", shouldDownload = false)
+            withContext(Dispatchers.Default) {
+                val runtime = TypstWasmRuntime(module, "0.15.1")
+                inputs.forEach { input ->
+                    val workspace = TypstWasmWorkspace(project, repositoryRoot, emptyMap()) { _, _ -> }
+                    val result = workspace.compile(runtime, input, TypstWasmOptions(mapOf("format" to "pdf", "shouldRetainSourceMap" to false), emptyMap()))
+                    assertTrue("Typst failed for ${samplesRoot.relativize(input)}: ${result.output["diagnostics"]}", result.output["isSuccess"].asBoolean)
+                    assertTrue("Typst did not create a PDF for $input", result.binary.single().take(5).toByteArray().toString(Charsets.US_ASCII) == "%PDF-")
+                }
+            }
         }
     }
-
-    private fun runProcess(command: List<String>, directory: Path): ProcessResult {
-        val process = ProcessBuilder(command)
-            .directory(directory.toFile())
-            .redirectErrorStream(true)
-            .start()
-        assertTrue("process timed out: ${command.joinToString(" ")}", process.waitFor(60, TimeUnit.SECONDS))
-        return ProcessResult(process.exitValue(), process.inputStream.bufferedReader().readText())
-    }
-
-    private data class ProcessResult(val exitCode: Int, val output: String)
 }

@@ -45,7 +45,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
             component.enableUfcsLeftCompletion != settings.enableUfcsLeftCompletion ||
             component.enableUfcsRightCompletion != settings.enableUfcsRightCompletion ||
             component.enableOnEnter != settings.enableOnEnter ||
-            component.typstExecutablePath != settings.typstExecutablePath.orEmpty() ||
+            component.typstWasmVersion != settings.typstWasmVersion.orEmpty() ||
             component.useSystemFonts != settings.useSystemFonts ||
             component.fontPaths != settings.fontPaths.orEmpty() ||
             component.typstExtraArguments != settings.typstExtraArguments.orEmpty() ||
@@ -53,8 +53,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
             component.autoPreview != settings.autoPreview.orEmpty() ||
             component.previewArguments != settings.previewArguments.orEmpty() ||
             component.invertPreviewColors != settings.invertPreviewColors ||
-            component.useNativeRenderer != settings.useNativeRenderer ||
-            component.autoDownloadRenderer != settings.autoDownloadRenderer ||
+            component.autoDownloadWasm != settings.autoDownloadWasm ||
             component.defaultExportFormat != settings.defaultExportFormat.orEmpty() ||
             component.autoExport != settings.autoExport.orEmpty() ||
             component.exportTarget != settings.exportTarget.orEmpty() ||
@@ -89,7 +88,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         settings.enableUfcsLeftCompletion = component.enableUfcsLeftCompletion
         settings.enableUfcsRightCompletion = component.enableUfcsRightCompletion
         settings.enableOnEnter = component.enableOnEnter
-        settings.typstExecutablePath = component.typstExecutablePath.trim()
+        settings.typstWasmVersion = component.typstWasmVersion.trim()
         settings.useSystemFonts = component.useSystemFonts
         settings.fontPaths = component.fontPaths.trim()
         settings.typstExtraArguments = component.typstExtraArguments.trim()
@@ -97,8 +96,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         settings.autoPreview = component.autoPreview
         settings.previewArguments = component.previewArguments.trim()
         settings.invertPreviewColors = component.invertPreviewColors
-        settings.useNativeRenderer = component.useNativeRenderer
-        settings.autoDownloadRenderer = component.autoDownloadRenderer
+        settings.autoDownloadWasm = component.autoDownloadWasm
         settings.defaultExportFormat = component.defaultExportFormat
         settings.autoExport = component.autoExport
         settings.exportTarget = component.exportTarget
@@ -131,7 +129,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         component.enableUfcsLeftCompletion = settings.enableUfcsLeftCompletion
         component.enableUfcsRightCompletion = settings.enableUfcsRightCompletion
         component.enableOnEnter = settings.enableOnEnter
-        component.typstExecutablePath = settings.typstExecutablePath.orEmpty()
+        component.typstWasmVersion = settings.typstWasmVersion.orEmpty()
         component.useSystemFonts = settings.useSystemFonts
         component.fontPaths = settings.fontPaths.orEmpty()
         component.typstExtraArguments = settings.typstExtraArguments.orEmpty()
@@ -139,8 +137,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         component.autoPreview = settings.autoPreview.orEmpty().ifBlank { "onType" }
         component.previewArguments = settings.previewArguments.orEmpty()
         component.invertPreviewColors = settings.invertPreviewColors
-        component.useNativeRenderer = settings.useNativeRenderer
-        component.autoDownloadRenderer = settings.autoDownloadRenderer
+        component.autoDownloadWasm = settings.autoDownloadWasm
         component.defaultExportFormat = settings.defaultExportFormat.orEmpty().ifBlank { "pdf" }
         component.autoExport = settings.autoExport.orEmpty().ifBlank { "never" }
         component.exportTarget = settings.exportTarget.orEmpty().ifBlank { "paged" }
@@ -174,8 +171,8 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         private val ufcsLeftCheckBox = JBCheckBox("Place arguments before content")
         private val ufcsRightCheckBox = JBCheckBox("Place content as the first argument")
 
-        private val executablePathField = JBTextField().apply {
-            emptyText.text = "Detected automatically when empty"
+        private val wasmVersionField = JBTextField().apply {
+            emptyText.text = "Latest bundled engine"
         }
         private val systemFontsCheckBox = JBCheckBox("Use system fonts")
         private val fontPathsField = JBTextField()
@@ -185,8 +182,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         private val autoPreviewComboBox = JComboBox(AUTO_TRIGGERS.toTypedArray())
         private val previewArgumentsField = JBTextField()
         private val invertPreviewCheckBox = JBCheckBox("Invert preview colors")
-        private val nativeRendererCheckBox = JBCheckBox("Use native incremental SVG renderer")
-        private val autoDownloadRendererCheckBox = JBCheckBox("Download the renderer when first needed")
+        private val autoDownloadWasmCheckBox = JBCheckBox("Download the selected WASM engine when first needed")
 
         private val exportFormatComboBox = JComboBox(EXPORT_FORMATS.toTypedArray())
         private val autoExportComboBox = JComboBox(AUTO_TRIGGERS.toTypedArray())
@@ -238,7 +234,7 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         var enableUfcsRightCompletion: Boolean
             get() = ufcsRightCheckBox.isSelected
             set(value) { ufcsRightCheckBox.isSelected = value }
-        var typstExecutablePath by executablePathField::text
+        var typstWasmVersion by wasmVersionField::text
         var useSystemFonts: Boolean
             get() = systemFontsCheckBox.isSelected
             set(value) { systemFontsCheckBox.isSelected = value }
@@ -254,12 +250,9 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
         var invertPreviewColors: Boolean
             get() = invertPreviewCheckBox.isSelected
             set(value) { invertPreviewCheckBox.isSelected = value }
-        var useNativeRenderer: Boolean
-            get() = nativeRendererCheckBox.isSelected
-            set(value) { nativeRendererCheckBox.isSelected = value }
-        var autoDownloadRenderer: Boolean
-            get() = autoDownloadRendererCheckBox.isSelected
-            set(value) { autoDownloadRendererCheckBox.isSelected = value }
+        var autoDownloadWasm: Boolean
+            get() = autoDownloadWasmCheckBox.isSelected
+            set(value) { autoDownloadWasmCheckBox.isSelected = value }
         var defaultExportFormat: String
             get() = exportFormatComboBox.selectedItem as String
             set(value) { exportFormatComboBox.selectedItem = value }
@@ -302,18 +295,17 @@ class TypstSettingsConfigurable(private val project: Project) : Configurable {
                 row { cell(ufcsRightCheckBox) }
             }
             group("Typst and fonts") {
-                row("Typst executable:") { cell(executablePathField).align(AlignX.FILL) }
+                row("Typst WASM version:") { cell(wasmVersionField).align(AlignX.FILL) }
                 row { cell(systemFontsCheckBox) }
                 row("Font paths:") { cell(fontPathsField).align(AlignX.FILL) }
-                row("Extra Typst arguments:") { cell(extraArgumentsField).align(AlignX.FILL) }
+                row("Compiler options:") { cell(extraArgumentsField).align(AlignX.FILL) }
             }
             group("Preview") {
                 row("Automatic refresh:") { cell(autoPreviewComboBox) }
                 row("Image PPI:") { cell(previewPpiSpinner) }
-                row("Preview arguments:") { cell(previewArgumentsField).align(AlignX.FILL) }
+                row("Preview options:") { cell(previewArgumentsField).align(AlignX.FILL) }
                 row { cell(invertPreviewCheckBox) }
-                row { cell(nativeRendererCheckBox) }
-                row { cell(autoDownloadRendererCheckBox) }
+                row { cell(autoDownloadWasmCheckBox) }
             }
             group("Export and pasted files") {
                 row("Default format:") { cell(exportFormatComboBox) }

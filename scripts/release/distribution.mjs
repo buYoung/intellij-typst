@@ -23,7 +23,7 @@ export function readDistribution() {
   for (const engine of manifest.engines) {
     if (engine.file !== `typst-wasm-${engine.version}.zip`) throw new Error('Invalid engine filename');
     if (engine.verification?.isModuleLoaded !== true || engine.verification?.hasDiagnostics !== true ||
-        engine.verification.compiled?.length !== 4 || engine.verification.compiled.some(item => item.pageCount < 1)) {
+        engine.verification?.isRawModuleLoaded !== true || engine.verification.compiled?.length !== 8 || engine.verification.compiled.some(item => item.pageCount < 1)) {
       throw new Error(`Incomplete artifact verification for ${engine.version}`);
     }
     const content = readFileSync(path.join(directory, engine.file));

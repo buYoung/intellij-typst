@@ -4,6 +4,14 @@
 
 ## [Unreleased]
 
+## [0.2.0]
+
+- Replace Typst CLI and native renderer processes with a JVM-hosted WASM compiler, including diagnostics, source mapping, package imports, fonts, and PDF/PNG/SVG/HTML export.
+- Bundle the latest engine and provide all stable Typst versions from 0.13.0 through checksum-pinned WASM releases.
+### Changed
+- Set the first planned JetBrains Marketplace release version to 0.2.0.
+- Replace the packaged plugin logo with the selected ninja-style T symbol, vectorized for light and dark backgrounds.
+
 ## [0.1.0] - 2026-08-03
 ### Added
 - Project-scoped Typst runtime protocol v1 with versioned request correlation, open-document overlays, compiler diagnostics, secure `@preview` package installation, and an editor-integrated responsive JCEF SVG preview with click-to-source navigation.

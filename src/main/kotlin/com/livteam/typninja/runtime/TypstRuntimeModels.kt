@@ -6,7 +6,6 @@ enum class TypstRuntimeStatus {
     READY,
     INCOMPATIBLE,
     FAILED,
-    CLI_FALLBACK,
 }
 
 enum class TypstPackageStatus {

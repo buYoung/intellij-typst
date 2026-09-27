@@ -1,6 +1,5 @@
 package com.livteam.typninja.preview
 
-import com.intellij.execution.configurations.GeneralCommandLine
 import com.intellij.notification.NotificationGroupManager
 import com.intellij.notification.NotificationType
 import com.intellij.openapi.Disposable
@@ -18,18 +17,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardCopyOption
-import java.nio.charset.StandardCharsets
-import java.util.Comparator
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicLong
@@ -58,8 +52,6 @@ class TypstPreviewService(
 ) : Disposable {
     private val listeners = ConcurrentHashMap.newKeySet<(TypstPreviewResult) -> Unit>()
     private val channelGenerations = ConcurrentHashMap<String, AtomicLong>()
-    private val previewDirectories = ConcurrentHashMap.newKeySet<Path>()
-    private val activeProcesses = ConcurrentHashMap<String, Process>()
     private val activeJobs = ConcurrentHashMap<String, Job>()
     private val activeRequests = ConcurrentHashMap<String, CompilationRequest>()
     private val latestResults = ConcurrentHashMap<String, TypstPreviewResult>()
@@ -102,7 +94,7 @@ class TypstPreviewService(
         documentVersion: Long,
     ) {
         val normalizedFormat = format.lowercase()
-        if (normalizedFormat !in CLI_FORMATS) {
+        if (normalizedFormat !in OUTPUT_FORMATS) {
             publish(TypstPreviewResult(emptyList(), normalizedFormat, previewSource, "Unsupported Typst export format"))
             return
         }
@@ -119,212 +111,66 @@ class TypstPreviewService(
         val generationCounter = channelGenerations.computeIfAbsent(channel) { AtomicLong() }
         val generation = generationCounter.incrementAndGet()
         activeJobs.remove(channel)?.cancel()
-        activeProcesses.remove(channel)?.destroyForcibly()
         publish(TypstPreviewResult(emptyList(), normalizedFormat, previewSource, isRunning = true))
 
         activeRequests[channel] = request
         val job = coroutineScope.launch(start = CoroutineStart.LAZY) {
             val startedAt = System.nanoTime()
-            val capability = TypstToolchainService.getInstance(project).awaitCapability()
-            if (!capability.isValid || capability.executablePath == null) {
-                publishCurrent(channel, generation, TypstPreviewResult(
-                    emptyList(), normalizedFormat, previewSource,
-                    capability.failureMessage ?: "Typst executable is unavailable",
-                    durationMillis = elapsedMillis(startedAt),
-                ))
-                return@launch
-            }
-            val settings = TypstSettingsService.getInstance(project)
-            if (destination == null && settings.state.useNativeRenderer) {
-                val runtimeResult = TypstRuntimeService.getInstance(project)
-                    .compileChangedSource(previewSource, changedSource, unsavedText, render = true, documentVersion)
-                if (runtimeResult != null) {
-                    publishCurrent(channel, generation, TypstPreviewResult(
-                        outputFiles = emptyList(),
-                        format = "svg",
-                        sourceFile = previewSource,
-                        failureMessage = runtimeResult.takeIf { it.outputStatus == "failed" }
-                            ?.diagnostics?.firstOrNull()?.message,
-                        durationMillis = elapsedMillis(startedAt),
-                        previewUrl = runtimeResult.previewUrl,
-                        sourceMappingAvailable = runtimeResult.sourceMappingAvailable,
-                        runtimeGeneration = runtimeResult.generation,
-                        documentVersion = runtimeResult.documentVersion,
-                        pageCount = runtimeResult.pages.size,
-                    ))
-                    return@launch
-                }
-            }
-            val previewSourcePath = Path.of(previewSource.path).toAbsolutePath().normalize()
-            val changedSourcePath = Path.of(changedSource.path).toAbsolutePath().normalize()
-            val originalRoot = settings.workspaceRoot(previewSourcePath)
-            val originalEntrypoint = settings.mainFile(previewSourcePath)
-            val output = destination ?: createPreviewOutput(generation, normalizedFormat)
-            var overlay: CompilationOverlay? = null
             try {
-                val outputParent = output.parent ?: throw IllegalArgumentException("Typst output needs a parent directory")
-                withContext(Dispatchers.IO) { Files.createDirectories(outputParent) }
-                overlay = unsavedText?.let {
-                    withContext(Dispatchers.IO) { createOverlay(originalRoot, changedSourcePath, originalEntrypoint, it) }
-                }
-                val compileRoot = overlay?.root ?: originalRoot
-                val compileEntrypoint = overlay?.entrypoint ?: originalEntrypoint
-                val command = buildCommand(
-                    executablePath = capability.executablePath!!,
-                    root = compileRoot,
-                    entrypoint = compileEntrypoint,
-                    output = pageOutputPath(output, normalizedFormat),
-                    format = normalizedFormat,
-                    isPreview = destination == null,
-                    changedSourcePath = changedSourcePath,
-                )
-                val commandResult = withContext(Dispatchers.IO) { runCommand(channel, command) }
-                if (commandResult.exitCode != 0) {
+                val capability = TypstToolchainService.getInstance(project).awaitCapability()
+                check(capability.isValid) { capability.failureMessage ?: "Typst WASM engine is unavailable" }
+                val runtime = TypstRuntimeService.getInstance(project)
+                if (destination == null) {
+                    val result = runtime.compileChangedSource(previewSource, changedSource, unsavedText, render = true, documentVersion)
                     publishCurrent(channel, generation, TypstPreviewResult(
-                        emptyList(), normalizedFormat, previewSource,
-                        commandResult.error.ifBlank { "Typst exited with code ${commandResult.exitCode}" },
-                        durationMillis = elapsedMillis(startedAt),
+                        outputFiles = emptyList(), format = "svg", sourceFile = previewSource,
+                        failureMessage = if (result.outputStatus == "failed") result.diagnostics.firstOrNull { it.severity == "error" }?.message ?: "Typst compilation failed" else null,
+                        durationMillis = elapsedMillis(startedAt), previewUrl = result.previewUrl,
+                        sourceMappingAvailable = result.sourceMappingAvailable, runtimeGeneration = result.generation,
+                        documentVersion = result.documentVersion, pageCount = result.pages.size,
                     ))
-                    return@launch
+                } else {
+                    val compiled = runtime.compileForExport(previewSource, unsavedText, normalizedFormat)
+                    check(compiled.output["isSuccess"].asBoolean) {
+                        compiled.output.getAsJsonArray("diagnostics").filter { it.asJsonObject["severity"].asString == "error" }
+                            .joinToString("\n") { it.asJsonObject["message"].asString }.ifBlank { "Typst compilation failed" }
+                    }
+                    val outputFiles = withContext(Dispatchers.IO) {
+                        val output = pageOutputPath(destination.toAbsolutePath().normalize(), normalizedFormat)
+                        val pages = compiled.output.getAsJsonArray("pages")
+                        val contents = when (normalizedFormat) {
+                            "pdf", "png" -> compiled.binary
+                            "svg" -> compiled.output.getAsJsonArray("svgPages").map { it.asString.toByteArray(Charsets.UTF_8) }
+                            else -> listOf(compiled.output["html"].asString.toByteArray(Charsets.UTF_8))
+                        }
+                        contents.mapIndexed { index, bytes ->
+                            currentCoroutineContext().ensureActive()
+                            check(channelGenerations[channel]?.get() == generation) { "Superseded Typst export" }
+                            val path = if (normalizedFormat in PAGED_IMAGE_FORMATS)
+                                output.resolveSibling(output.fileName.toString().replace("{p}", pages[index].asJsonObject["number"].asString)) else output
+                            Files.createDirectories(path.parent)
+                            val temporary = Files.createTempFile(path.parent, ".typst-export-", ".tmp")
+                            try {
+                                Files.write(temporary, bytes)
+                                currentCoroutineContext().ensureActive()
+                                Files.move(temporary, path, StandardCopyOption.REPLACE_EXISTING)
+                            } finally { Files.deleteIfExists(temporary) }
+                            LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path)
+                        }.filterNotNull()
+                    }
+                    publishCurrent(channel, generation, TypstPreviewResult(outputFiles, normalizedFormat, previewSource, durationMillis = elapsedMillis(startedAt)))
                 }
-                val outputFiles = withContext(Dispatchers.IO) { refreshOutputs(pageOutputPath(output, normalizedFormat)) }
-                publishCurrent(channel, generation, TypstPreviewResult(
-                    outputFiles, normalizedFormat, previewSource, durationMillis = elapsedMillis(startedAt),
-                ))
-            } catch (exception: CancellationException) {
-                throw exception
+            } catch (exception: CancellationException) { throw exception
             } catch (exception: Exception) {
-                publishCurrent(channel, generation, TypstPreviewResult(
-                    emptyList(), normalizedFormat, previewSource,
-                    exception.message ?: "Typst compilation failed",
-                    durationMillis = elapsedMillis(startedAt),
-                ))
+                publishCurrent(channel, generation, TypstPreviewResult(emptyList(), normalizedFormat, previewSource,
+                    exception.message ?: "Typst WASM compilation failed", durationMillis = elapsedMillis(startedAt)))
             } finally {
-                overlay?.let { withContext(Dispatchers.IO) { deleteDirectory(it.root) } }
                 if (channelGenerations[channel]?.get() == generation) activeJobs.remove(channel)
                 if (channelGenerations[channel]?.get() == generation) activeRequests.remove(channel, request)
             }
         }
         activeJobs[channel] = job
         job.start()
-    }
-
-    private fun buildCommand(
-        executablePath: String,
-        root: Path,
-        entrypoint: Path,
-        output: Path,
-        format: String,
-        isPreview: Boolean,
-        changedSourcePath: Path,
-    ): GeneralCommandLine {
-        val settings = TypstSettingsService.getInstance(project)
-        val command = GeneralCommandLine(executablePath)
-            .withWorkDirectory(root.toFile())
-            .withParameters("compile", "--format=$format")
-        val extraArguments = settings.extraArguments() + if (isPreview) settings.previewArguments() else emptyList()
-        command.addParameters(sanitizeArguments(extraArguments))
-        command.addParameters("--root", root.toString())
-        settings.resolvedFontPaths(changedSourcePath).forEach { command.addParameters("--font-path", it.toString()) }
-        if (!settings.state.useSystemFonts) command.addParameter("--ignore-system-fonts")
-        settings.state.packagePath.orEmpty().takeIf(String::isNotBlank)?.let { command.addParameters("--package-path", it) }
-        settings.state.packageCachePath.orEmpty().takeIf(String::isNotBlank)?.let { command.addParameters("--package-cache-path", it) }
-        if (format == "html" && command.parametersList.parameters.none { it.startsWith("--features") }) {
-            command.addParameter("--features=html")
-        }
-        if (format == "png") command.addParameter("--ppi=${settings.state.previewPpi}")
-        command.addParameters(entrypoint.toString(), output.toString())
-        return command
-    }
-
-    private fun sanitizeArguments(arguments: List<String>): List<String> {
-        val result = ArrayList<String>()
-        var index = 0
-        while (index < arguments.size) {
-            val argument = arguments[index]
-            val option = argument.substringBefore('=')
-            if (option in DEDICATED_OPTIONS) {
-                if ('=' !in argument && option != "--ignore-system-fonts") index++
-            } else {
-                result.add(argument)
-            }
-            index++
-        }
-        return result
-    }
-
-    private suspend fun runCommand(channel: String, commandLine: GeneralCommandLine): CommandResult = coroutineScope {
-        val process = commandLine.createProcess()
-        activeProcesses[channel] = process
-        try {
-            val output = async(Dispatchers.IO) { process.inputStream.bufferedReader().readText() }
-            val error = async(Dispatchers.IO) { process.errorStream.bufferedReader().readText() }
-            while (!process.waitFor(50, TimeUnit.MILLISECONDS)) {
-                ensureActive()
-                delay(1)
-            }
-            CommandResult(process.exitValue(), output.await(), error.await().trim())
-        } finally {
-            activeProcesses.remove(channel, process)
-            if (process.isAlive) process.destroyForcibly()
-        }
-    }
-
-    private suspend fun createOverlay(root: Path, changedFile: Path, entrypoint: Path, unsavedText: String): CompilationOverlay {
-        if (!changedFile.startsWith(root) || !entrypoint.startsWith(root)) {
-            throw IllegalArgumentException("The edited file and main file must be inside the configured Typst root")
-        }
-        val overlayRoot = Files.createTempDirectory("typst-source-overlay-")
-        previewDirectories.add(overlayRoot)
-        mirrorTree(root, overlayRoot, root.relativize(changedFile), unsavedText, 0)
-        return CompilationOverlay(overlayRoot, overlayRoot.resolve(root.relativize(entrypoint)))
-    }
-
-    private suspend fun mirrorTree(
-        sourceDirectory: Path,
-        targetDirectory: Path,
-        changedRelativePath: Path,
-        unsavedText: String,
-        depth: Int,
-    ) {
-        Files.createDirectories(targetDirectory)
-        Files.newDirectoryStream(sourceDirectory).use { children ->
-            for (child in children) {
-                currentCoroutineContext().ensureActive()
-                val target = targetDirectory.resolve(child.fileName.toString())
-                val changedSegment = changedRelativePath.getName(depth)
-                if (child.fileName == changedSegment) {
-                    if (depth == changedRelativePath.nameCount - 1) {
-                        Files.writeString(target, unsavedText, StandardCharsets.UTF_8)
-                    } else {
-                        mirrorTree(child, target, changedRelativePath, unsavedText, depth + 1)
-                    }
-                } else {
-                    linkOrMirror(child, target)
-                }
-            }
-        }
-    }
-
-    private suspend fun linkOrMirror(source: Path, target: Path) {
-        currentCoroutineContext().ensureActive()
-        runCatching { Files.createSymbolicLink(target, source) }.getOrElse {
-            if (Files.isDirectory(source)) {
-                Files.createDirectories(target)
-                Files.newDirectoryStream(source).use { children ->
-                    children.forEach { child -> linkOrMirror(child, target.resolve(child.fileName.toString())) }
-                }
-            } else {
-                runCatching { Files.createLink(target, source) }
-                    .getOrElse { Files.copy(source, target, StandardCopyOption.COPY_ATTRIBUTES) }
-            }
-        }
-    }
-
-    private fun createPreviewOutput(generation: Long, format: String): Path {
-        val directory = Files.createTempDirectory("typst-preview-$generation-")
-        previewDirectories.add(directory)
-        return directory.resolve(if (format in PAGED_IMAGE_FORMATS) "preview-{p}.$format" else "preview.$format")
     }
 
     private fun pageOutputPath(output: Path, format: String): Path {
@@ -335,22 +181,10 @@ class TypstPreviewService(
         return output.resolveSibling("$baseName-{p}.$extension")
     }
 
-    private fun refreshOutputs(output: Path): List<VirtualFile> {
-        val outputName = output.fileName.toString()
-        val paths = if ("{p}" in outputName) {
-            val glob = outputName.replace("{p}", "*")
-            Files.newDirectoryStream(output.parent, glob).use { files -> files.toList().sortedBy(::pageNumber) }
-        } else listOf(output)
-        return paths.mapNotNull { path -> LocalFileSystem.getInstance().refreshAndFindFileByNioFile(path) }
-    }
-
-    private fun pageNumber(path: Path): Int = PAGE_NUMBER_PATTERN.find(path.fileName.toString())
-        ?.groupValues?.getOrNull(1)?.toIntOrNull() ?: Int.MAX_VALUE
-
     private fun publishCurrent(channel: String, generation: Long, result: TypstPreviewResult) {
         if (channelGenerations[channel]?.get() != generation) return
         ApplicationManager.getApplication().invokeLater {
-            if (channelGenerations[channel]?.get() == generation) publish(result)
+            if (!project.isDisposed && channelGenerations[channel]?.get() == generation) publish(result)
         }
     }
 
@@ -371,30 +205,16 @@ class TypstPreviewService(
 
     override fun dispose() {
         activeJobs.values.forEach(Job::cancel)
-        activeProcesses.values.forEach(Process::destroyForcibly)
-        previewDirectories.forEach(::deleteDirectory)
         activeJobs.clear()
         activeRequests.clear()
-        activeProcesses.clear()
-        previewDirectories.clear()
         latestResults.clear()
         latestSuccessfulResults.clear()
         currentPreviewSourcePath = null
         listeners.clear()
     }
 
-    private fun deleteDirectory(directory: Path) {
-        previewDirectories.remove(directory)
-        if (!Files.exists(directory)) return
-        runCatching {
-            Files.walk(directory).use { paths -> paths.sorted(Comparator.reverseOrder()).forEach(Files::deleteIfExists) }
-        }
-    }
-
     private fun elapsedMillis(startedAt: Long): Long = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startedAt)
 
-    private data class CompilationOverlay(val root: Path, val entrypoint: Path)
-    private data class CommandResult(val exitCode: Int, val output: String, val error: String)
     private data class CompilationRequest(
         val previewSourcePath: String,
         val changedSourcePath: String,
@@ -406,12 +226,8 @@ class TypstPreviewService(
 
     companion object {
         private const val PREVIEW_CHANNEL = "preview"
-        private val CLI_FORMATS = setOf("pdf", "png", "svg", "html")
+        private val OUTPUT_FORMATS = setOf("pdf", "png", "svg", "html")
         private val PAGED_IMAGE_FORMATS = setOf("png", "svg")
-        private val DEDICATED_OPTIONS = setOf(
-            "--root", "--font-path", "--ignore-system-fonts", "--package-path", "--package-cache-path",
-        )
-        private val PAGE_NUMBER_PATTERN = Regex("-(\\d+)[.][^.]+$")
 
         fun getInstance(project: Project): TypstPreviewService = project.service()
     }

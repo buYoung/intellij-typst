@@ -29,7 +29,7 @@ export async function publishWasm() {
   capture('git', ['-c', 'credential.helper=', '-c', 'credential.helper=!gh auth git-credential', 'ls-remote', `https://github.com/${repository}.wiki.git`, 'HEAD']);
   const temporary = mkdtempSync(path.join(tmpdir(), 'typstninja-release-'));
   try {
-    const notes = `Typst WASM 배포 묶음 ${manifest.releaseVersion}\n\n지원 엔진: ${manifest.engines.map(item => item.version).join(', ')}\n\n각 ZIP에는 WASM·ES module·TypeScript 선언·라이선스 고지가 포함됩니다. PDF·SVG와 메모리 파일·폰트·진단 API를 제공합니다.\n\n소스 커밋: ${commit}\n\n[사용법과 제약](https://github.com/${repository}/wiki/Typst-WASM) · [버전별 다운로드](https://github.com/${repository}/wiki/Typst-WASM-Versions)\n\nIntelliJ 플러그인 배포는 포함하지 않습니다.\n`;
+    const notes = `Typst WASM 배포 묶음 ${manifest.releaseVersion}\n\n지원 엔진: ${manifest.engines.map(item => item.version).join(', ')}\n\n각 ZIP에는 브라우저용 WASM·JVM 호스트용 raw WASM·ES module·TypeScript 선언·라이선스 고지가 포함됩니다. PDF·PNG·SVG·HTML, 메모리 파일·패키지·폰트·진단과 소스 위치 이동 API를 제공합니다.\n\n소스 커밋: ${commit}\n\n[사용법과 제약](https://github.com/${repository}/wiki/Typst-WASM) · [버전별 다운로드](https://github.com/${repository}/wiki/Typst-WASM-Versions)\n\nIntelliJ 플러그인 배포는 포함하지 않습니다.\n`;
     const notesPath = path.join(temporary, 'notes.md');
     writeFileSync(notesPath, notes);
     let release = existingRelease(manifest.tag);

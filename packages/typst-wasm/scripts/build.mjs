@@ -24,7 +24,8 @@ const staging = mkdtempSync(path.join(dist, '.build-'));
 try {
   const manifest = {
     schemaVersion: 1,
-    apiVersion: 1,
+    apiVersion: 2,
+    rawApiVersion: 1,
     releaseVersion,
     tag: tagFor(releaseVersion),
     repository,
@@ -43,11 +44,13 @@ try {
     // Distinct library names keep cached outputs from different engines apart.
     const libraryName = `typstninja_wasm_v${version.replaceAll('.', '_')}`;
     run(executable('wasm-bindgen'), [path.join(target, manifest.target, 'release', `${libraryName}.wasm`), '--target', 'web', '--out-name', 'typst_wasm', '--out-dir', engineOutput]);
+    run('cargo', ['build', '--release', '--locked', '--target', manifest.target, '--no-default-features', '--features', 'raw', '--manifest-path', engineManifest, '--target-dir', target]);
+    copyFileSync(path.join(target, manifest.target, 'release', `${libraryName}.wasm`), path.join(engineOutput, 'typst_wasm_raw.wasm'));
     for (const file of ['index.js', 'index.d.ts']) copyFileSync(path.join(packageRoot, 'src', file), path.join(engineOutput, file));
     for (const [source, name] of [[path.join(repoRoot, 'LICENSE'), 'LICENSE'], [path.join(packageRoot, 'README.md'), 'README.md']]) {
       copyFileSync(source, path.join(engineOutput, name));
     }
-    writeFileSync(path.join(engineOutput, 'package.json'), JSON.stringify({type:'module',version,typstVersion:version,distributionVersion:releaseVersion,exports:{'.':{types:'./index.d.ts',import:'./index.js'},'./wasm':'./typst_wasm_bg.wasm'}}, null, 2)+'\n');
+    writeFileSync(path.join(engineOutput, 'package.json'), JSON.stringify({type:'module',version,typstVersion:version,distributionVersion:releaseVersion,exports:{'.':{types:'./index.d.ts',import:'./index.js'},'./wasm':'./typst_wasm_bg.wasm','./raw-wasm':'./typst_wasm_raw.wasm'}}, null, 2)+'\n');
     const metadata = JSON.parse(capture('cargo', ['metadata', '--locked', '--format-version', '1', '--manifest-path', engineManifest, '--filter-platform', manifest.target], { maxBuffer: 16 * 1024 * 1024 }));
     const typst = metadata.packages.filter(item => item.name === 'typst');
     if (typst.length !== 1 || typst[0].version !== version) throw new Error(`Unexpected Typst dependency for ${version}`);
@@ -58,19 +61,24 @@ try {
     copyFileSync(path.join(path.dirname(assets.manifest_path), 'NOTICE'), path.join(engineOutput, 'FONT-NOTICES.txt'));
     run('cargo', ['about', 'generate', path.join(packageRoot, 'about.hbs'), '--manifest-path', engineManifest, '--config', path.join(packageRoot, 'about.toml'), '--locked', '--fail', '--output-file', path.join(engineOutput, 'THIRD-PARTY-NOTICES.txt')], { env });
     const bytes = readFileSync(path.join(engineOutput, 'typst_wasm_bg.wasm'));
+    const rawBytes = readFileSync(path.join(engineOutput, 'typst_wasm_raw.wasm'));
     const verification = JSON.parse(capture('node', [path.join(packageRoot, 'scripts/verify-engine.mjs'), engineOutput, version]));
     const file = `typst-wasm-${version}.zip`;
     run('python3', [path.join(packageRoot, 'scripts/archive.py'), engineOutput, path.join(staging, file)]);
     const zip = readFileSync(path.join(staging, file));
-    manifest.engines.push({ version, file, sizeBytes: zip.length, sha256: sha256(zip), wasmSizeBytes: bytes.length, wasmSha256: sha256(bytes), verification, url: `https://github.com/${repository}/releases/download/${manifest.tag}/${file}` });
+    manifest.engines.push({ version, file, sizeBytes: zip.length, sha256: sha256(zip), wasmSizeBytes: bytes.length, wasmSha256: sha256(bytes), rawWasmSizeBytes: rawBytes.length, rawWasmSha256: sha256(rawBytes), verification, url: `https://github.com/${repository}/releases/download/${manifest.tag}/${file}` });
     console.info(`Verified and packaged Typst ${version}: ${zip.length} bytes`);
   }
+  if (JSON.stringify(sourceFiles()) !== JSON.stringify(manifest.sources)) throw new Error('Sources changed during the build; rebuild the complete distribution.');
   writeFileSync(path.join(staging, 'manifest.json'), JSON.stringify(manifest, null, 2)+'\n');
   const checksums = [...manifest.engines.map(item => `${item.sha256}  ${item.file}`), `${sha256(readFileSync(path.join(staging, 'manifest.json')))}  manifest.json`];
   writeFileSync(path.join(staging, 'SHA256SUMS'), checksums.join('\n')+'\n');
   const output = path.join(dist, hasEngine ? `partial-${versions[0]}` : releaseVersion);
   rmSync(output, { recursive: true, force: true });
   renameSync(staging, output);
+  if (!hasEngine) {
+    writeFileSync(path.join(packageRoot, 'plugin-manifest.json'), JSON.stringify({ releaseVersion, engines: manifest.engines }, null, 2) + '\n');
+  }
   console.info(`Distribution ready: ${output}`);
 } finally {
   rmSync(lock, { recursive: true, force: true });

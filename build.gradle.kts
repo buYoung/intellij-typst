@@ -1,7 +1,14 @@
+import java.security.MessageDigest
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
+import java.util.zip.ZipInputStream
+import groovy.json.JsonSlurper
 import org.jetbrains.intellij.platform.gradle.IntelliJPlatformType
 import org.jetbrains.intellij.platform.gradle.TestFrameworkType
 import org.jetbrains.intellij.platform.gradle.tasks.BuildPluginTask
-import org.jetbrains.intellij.platform.gradle.tasks.RunIdeTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginTask
 import org.jetbrains.intellij.platform.gradle.tasks.VerifyPluginSignatureTask
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
@@ -30,6 +37,9 @@ val integrationTestImplementation by configurations.getting {
 val integrationTestRuntimeOnly by configurations.getting
 
 dependencies {
+    implementation("com.dylibso.chicory:runtime:1.7.5")
+    implementation("com.dylibso.chicory:compiler:1.7.5")
+    implementation("org.apache.commons:commons-compress:1.28.0")
     testImplementation("junit:junit:4.13.2")
     integrationTestImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     integrationTestRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
@@ -108,20 +118,12 @@ tasks.named<VerifyPluginSignatureTask>("verifyPluginSignature") {
     )
 }
 
-val localTypstRuntimeExecutable = if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
-    "typst-runtime.exe"
-} else {
-    "typst-runtime"
-}
-val localTypstRuntimePath = layout.projectDirectory.file("renderer/target/debug/$localTypstRuntimeExecutable")
-
 val integrationTest by intellijPlatformTesting.testIdeUi.registering {
     task {
         testClassesDirs = integrationTestSourceSet.output.classesDirs
         classpath = integrationTestSourceSet.runtimeClasspath
         useJUnitPlatform()
         systemProperty("typst.test.project.path", layout.projectDirectory.asFile.absolutePath)
-        environment("TYPST_RUNTIME_PATH", localTypstRuntimePath.asFile.absolutePath)
     }
 }
 
@@ -129,8 +131,63 @@ tasks.named<KotlinCompile>("compileIntegrationTestKotlin") {
     compilerOptions.freeCompilerArgs.add("-Xskip-metadata-version-check")
 }
 
-tasks.named<RunIdeTask>("runIde") {
-    if (System.getenv("TYPST_RUNTIME_PATH").isNullOrBlank()) {
-        environment("TYPST_RUNTIME_PATH", localTypstRuntimePath.asFile.absolutePath)
+
+val prepareTypstWasm by tasks.registering {
+    val wasmManifestFile = layout.projectDirectory.file("packages/typst-wasm/plugin-manifest.json")
+    val wasmDistributionDirectory = layout.projectDirectory.dir("packages/typst-wasm/dist")
+    val bundledWasmDirectory = layout.buildDirectory.dir("generated/typst-wasm")
+    group = "build"
+    description = "Prepare the pinned Typst WASM engine and its licenses for the plugin"
+    inputs.file(wasmManifestFile)
+    outputs.dir(bundledWasmDirectory)
+    doLast {
+        @Suppress("UNCHECKED_CAST")
+        val manifest = JsonSlurper().parse(wasmManifestFile.asFile) as Map<String, Any>
+        @Suppress("UNCHECKED_CAST")
+        val asset = (manifest.getValue("engines") as List<Map<String, Any>>).last()
+        val version = asset.getValue("version").toString()
+        val names = setOf("typst_wasm_raw.wasm", "LICENSE", "FONT-NOTICES.txt", "THIRD-PARTY-NOTICES.txt")
+        val engineDirectory = wasmDistributionDirectory.dir("${manifest.getValue("releaseVersion")}/$version").asFile
+        val digest: (ByteArray) -> String = { bytes ->
+            MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+        }
+        val files = if (names.all { engineDirectory.resolve(it).isFile }) {
+            names.associateWith { engineDirectory.resolve(it).readBytes() }
+        } else {
+            val uri = URI(asset.getValue("url").toString())
+            require(uri.scheme == "https") { "WASM downloads require HTTPS" }
+            val archive = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NORMAL)
+                .connectTimeout(Duration.ofSeconds(15)).build().use { client ->
+                    val response = client.send(HttpRequest.newBuilder(uri).timeout(Duration.ofMinutes(3)).GET().build(),
+                        HttpResponse.BodyHandlers.ofByteArray())
+                    check(response.statusCode() == 200) { "WASM download failed: HTTP ${response.statusCode()}" }
+                    response.body()
+                }
+            check(archive.size.toLong() == (asset.getValue("sizeBytes") as Number).toLong() && digest(archive) == asset["sha256"]) { "WASM archive checksum mismatch" }
+            buildMap {
+                ZipInputStream(archive.inputStream()).use { zip ->
+                    while (true) {
+                        val entry = zip.nextEntry ?: break
+                        if (entry.name in names) put(entry.name, zip.readBytes())
+                    }
+                }
+            }
+        }
+        check(files.keys.containsAll(names)) { "WASM distribution is incomplete" }
+        val wasm = files.getValue("typst_wasm_raw.wasm")
+        check(wasm.size.toLong() == (asset.getValue("rawWasmSizeBytes") as Number).toLong() && digest(wasm) == asset["rawWasmSha256"]) { "WASM module checksum mismatch; rebuild the distribution" }
+        val output = bundledWasmDirectory.get().dir("typst-wasm").asFile
+        check(output.deleteRecursively()) { "Cannot replace the generated WASM resources" }
+        output.mkdirs()
+        output.resolve("$version.wasm").writeBytes(wasm)
+        wasmManifestFile.asFile.copyTo(output.resolve("manifest.json"), overwrite = true)
+        names.filter { it != "typst_wasm_raw.wasm" }.forEach { output.resolve(it).writeBytes(files.getValue(it)) }
     }
+}
+sourceSets.main { resources.srcDir(layout.buildDirectory.dir("generated/typst-wasm")) }
+tasks.named("processResources") { dependsOn(prepareTypstWasm) }
+
+tasks.withType<Test>().configureEach {
+    // The existing corpus now executes the full Typst compiler inside the test JVM.
+    maxHeapSize = "2g"
 }

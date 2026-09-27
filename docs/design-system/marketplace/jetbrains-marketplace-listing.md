@@ -1,6 +1,6 @@
 # Typstninja Marketplace 등록 정보와 소개문
 
-JetBrains Marketplace 페이지를 준비할 때 참고할 **등록 정보 명세와 게시 문안 초안**이다. 기준일은 2026-09-26이며, 로컬 `0.1.0`의 기능·설정을 기준으로 작성했다. 실제 상점 등록값이나 게시 완료 기록은 아니다.
+JetBrains Marketplace 페이지를 준비할 때 참고할 **등록 정보 명세와 게시 문안 초안**이다. 기준일은 2026-09-26이며, 로컬 기능·설정을 기준으로 작성했고, 2026-09-27 출시 버전을 `0.2.0`으로 확정했다. 실제 상점 등록값이나 게시 완료 기록은 아니다.
 
 로고·스크린샷 규격은 [시각 자산 규격](../visual-assets/stores/jetbrains-marketplace.md), T·청록색과 v3 스타일은 [디자인 기준](../visual-assets/index.md)을 따른다.
 
@@ -13,10 +13,10 @@ JetBrains Marketplace 페이지를 준비할 때 참고할 **등록 정보 명�
 | 제품명 | 확인: `Typstninja` | [plugin.xml](../../../src/main/resources/META-INF/plugin.xml)의 `<name>` |
 | 플러그인 식별자 | 확인: `com.livteam.typninja` | `plugin.xml`의 `<id>`. Marketplace 페이지의 ID·주소는 별도 확인 필요 |
 | 개발자 표시 | 확인: `livTeam` | `plugin.xml`의 `<vendor>`. 실제 Vendor 프로필 선택은 미확인 |
-| 버전 | 확인: `0.1.0` | [gradle.properties](../../../gradle.properties) |
+| 버전 | 확인: `0.2.0` | [gradle.properties](../../../gradle.properties) |
 | 짧은 소개·상세 설명 | 초안: 아래 영문 HTML | [소개문](#소개문) |
 | 시작 안내 | 초안: 설치 후 파일 열기·설정·미리보기·출력 | [시작 안내](#시작-안내) |
-| 변경 내역 | 초안: `0.1.0` 기능 요약 | [변경 내역](#변경-내역) |
+| 변경 내역 | 초안: `0.2.0` 기능 요약 | [변경 내역](#변경-내역) |
 | 최소 IDE 버전 | 설정 확인: 2024.3, `sinceBuild = "243"` | [호환성](#호환성) |
 | 소스 라이선스 | 확인: Apache License 2.0 | [LICENSE](../../../LICENSE). 실제 상점 License 입력값은 미확인 |
 | 웹사이트·소스·지원 링크 | 확인값과 후보를 구분 | [연락처와 링크](#연락처와-링크) |
@@ -24,7 +24,7 @@ JetBrains Marketplace 페이지를 준비할 때 참고할 **등록 정보 명�
 | 가격·결제 방식 | 미확정 | 소스 라이선스만으로 무료·유료를 결정하지 않음 |
 | 릴리스 채널·숨김 설정 | 로컬 설정: `default`, `hidden = true` | [배포 상태](#배포-상태) |
 | 공개 상점 주소·설치 링크 | 미확인 | 숫자 ID나 URL을 추정해서 만들지 않음 |
-| 로고·미디어 | 로고 PNG 선택 완료. 패키지 SVG·게시용 제품 캡처 제작 전 | [자산 목록](../visual-assets/asset-system.md) |
+| 로고·미디어 | Quiver SVG 변환·패키지 적용과 정보형 이미지 4장 완료. 실제 제품 캡처·상점 게시 전 | [자산 목록](../visual-assets/asset-system.md) |
 
 ## 소개문
 
@@ -57,22 +57,21 @@ in supported IntelliJ-based IDEs.</p>
       with document links and click-to-source navigation.</li>
   <li><b>Use packages and export:</b> download completed
       <code>@preview/name:version</code> imports and export to PDF, PNG,
-      SVG, or HTML using the configured Typst CLI.</li>
+      SVG, or HTML using the bundled Typst WASM engine.</li>
 </ul>
 
 <p><b>Requirements:</b> IntelliJ-based IDE 2024.3 or newer.
-Document preview requires a JCEF-capable IDE runtime and the native
-renderer. Explicit exports require a configured Typst CLI.
-Core language services remain available without the optional runtime.</p>
+Document preview requires a JCEF-capable IDE runtime.
+Compilation and exports run inside the IDE JVM without JCEF or Typst CLI.</p>
 
-<p><b>Network access:</b> the plugin may download native runtimes from
+<p><b>Network access:</b> the plugin may download additional WASM engine versions from
 GitHub Releases and Typst packages from packages.typst.org over HTTPS.
 It does not collect telemetry or analytics.</p>
 
 <p><a href="https://github.com/buYoung/intellij-typst">Source code and documentation</a></p>
 ```
 
-기능을 “모든 문법 완벽 지원”, “설정 없이 모든 IDE에서 미리보기”, “외부 도구 없는 내보내기”로 확대하지 않는다. 위 네트워크·수집 설명은 저장소의 현재 명시 내용이며, 이번 문서 작업에서 별도 네트워크 감사나 기능 실행을 수행한 것은 아니다.
+기능을 “모든 문법 완벽 지원”, “설정 없이 모든 IDE에서 미리보기”, “모든 엔진의 HTML 기능 완성”으로 확대하지 않는다. 위 네트워크·수집 설명은 저장소의 현재 명시 내용이며, 이번 문서 작업에서 별도 네트워크 감사나 기능 실행을 수행한 것은 아니다.
 
 ## 시작 안내
 
@@ -82,9 +81,9 @@ Getting started는 페이지 관리 화면에서 제공할 수 있는 안내다.
 <ol>
   <li>Open a project containing a <code>.typ</code> file.</li>
   <li>Open <b>Settings → Tools → Typst</b> to review project,
-      renderer, and compiler settings.</li>
+      WASM engine, and compiler settings.</li>
   <li>Use the editor's preview or split view to see the rendered document
-      when the native renderer and JCEF are available.</li>
+      when JCEF is available.</li>
   <li>For file export, configure the Typst executable and output settings,
       then choose <b>Tools → Export Typst</b>.</li>
 </ol>
@@ -94,10 +93,10 @@ Getting started는 페이지 관리 화면에서 제공할 수 있는 안내다.
 
 ## 변경 내역
 
-`0.1.0`용 문안 초안이다. [CHANGELOG](../../../CHANGELOG.md)에 기록된 날짜와 기능은 로컬 기록이며, 실제 상점 출시일을 입증하지 않는다.
+`0.2.0`용 문안 초안이다. [CHANGELOG](../../../CHANGELOG.md)에 기록된 날짜와 기능은 로컬 기록이며, 실제 상점 출시일을 입증하지 않는다.
 
 ```html
-<p><b>0.1.0</b></p>
+<p><b>0.2.0</b></p>
 <ul>
   <li>Added Typst file recognition, syntax highlighting, code folding,
       line comments, and conservative code formatting.</li>
@@ -105,7 +104,7 @@ Getting started는 페이지 관리 화면에서 제공할 수 있는 안내다.
       and editor services for supported Typst constructs.</li>
   <li>Added optional compiler diagnostics and package downloads.</li>
   <li>Added editor-integrated document preview with split view and
-      click-to-source navigation, plus Typst CLI exports.</li>
+      click-to-source navigation, plus WASM-based exports.</li>
 </ul>
 ```
 

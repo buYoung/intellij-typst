@@ -176,23 +176,7 @@ class TypstProjectModelService(
         return ENTRYPOINT_PATTERN.find(text)?.groupValues?.get(1)
     }
 
-    private fun packageRootPaths(): List<Path> {
-        val settings = project.service<TypstSettingsService>()
-        val roots = LinkedHashSet<Path>()
-        settings.packageRoots().forEach { configuredRoot ->
-            runCatching { Paths.get(configuredRoot) }.getOrNull()?.let(roots::add)
-        }
-        if (!settings.state.useDefaultPackageRoots) return roots.toList()
-        System.getenv("TYPST_PACKAGE_PATH")?.takeIf { it.isNotBlank() }?.let { configuredRoot ->
-            runCatching { Paths.get(configuredRoot) }.getOrNull()?.let(roots::add)
-        }
-        val home = Paths.get(System.getProperty("user.home"))
-        roots.add(home.resolve("Library/Application Support/typst/packages"))
-        roots.add(home.resolve("Library/Caches/typst/packages"))
-        roots.add(Paths.get(System.getenv("XDG_DATA_HOME") ?: home.resolve(".local/share").toString()).resolve("typst/packages"))
-        roots.add(Paths.get(System.getenv("XDG_CACHE_HOME") ?: home.resolve(".cache").toString()).resolve("typst/packages"))
-        return roots.toList()
-    }
+    private fun packageRootPaths(): List<Path> = com.livteam.typninja.runtime.TypstPackageStorage.roots(project)
 
     companion object {
         private val ENTRYPOINT_PATTERN = Regex("(?m)^\\s*entrypoint\\s*=\\s*\"([^\"]+)\"")
