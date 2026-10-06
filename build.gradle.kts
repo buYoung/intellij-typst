@@ -31,7 +31,7 @@ val integrationTestRuntimeOnly by configurations.getting
 
 dependencies {
     testImplementation("junit:junit:4.13.2")
-    integrationTestImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
+    integrationTestImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
     integrationTestRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
     integrationTestImplementation("org.kodein.di:kodein-di-jvm:7.26.1")
     integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
