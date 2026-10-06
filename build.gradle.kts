@@ -34,7 +34,7 @@ dependencies {
     integrationTestImplementation("org.junit.jupiter:junit-jupiter:6.1.2")
     integrationTestRuntimeOnly("org.junit.platform:junit-platform-launcher:6.1.2")
     integrationTestImplementation("org.kodein.di:kodein-di-jvm:7.26.1")
-    integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.10.2")
+    integrationTestImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-core-jvm:1.11.0")
 
     // IntelliJ Platform Gradle Plugin Dependencies Extension - read more: https://plugins.jetbrains.com/docs/intellij/tools-intellij-platform-gradle-plugin-dependencies-extension.html
     intellijPlatform {
